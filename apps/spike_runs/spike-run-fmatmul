@@ -1,0 +1,56 @@
+
+=============
+=  FMATMUL  =
+=============
+
+
+
+------------------------------------------------------------
+Calculating a (4 x 4) x (4 x 4) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+
+------------------------------------------------------------
+Calculating a (8 x 8) x (8 x 8) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+
+------------------------------------------------------------
+Calculating a (16 x 16) x (16 x 16) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+
+------------------------------------------------------------
+Calculating a (32 x 32) x (32 x 32) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+
+------------------------------------------------------------
+Calculating a (64 x 64) x (64 x 64) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+
+------------------------------------------------------------
+Calculating a (128 x 128) x (128 x 128) matrix multiplication...
+------------------------------------------------------------
+
+Calculating fmatmul...
+The execution took 0 cycles.
+The performance is %f FLOP/cycle (%f% utilization).
+Verifying result...
+Passed.

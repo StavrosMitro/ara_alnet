@@ -110,7 +110,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
 `ifdef IDEAL_DISPATCHER
   // Perfect dispatcher to Ara
-  accel_dispatcher_ideal i_accel_dispatcher_ideal #(
+  accel_dispatcher_ideal i_accel_dispatcher_ideal#( //i_accel_dispatcher_ideal this was before # but we had make issue and i removed it (stavros)
     .CVA6Cfg(CVA6Cfg),
     .cva6_to_acc_t(cva6_to_acc_t),
     .acc_to_cva6_t(acc_to_cva6_t)

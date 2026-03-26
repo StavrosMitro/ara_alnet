@@ -2906,7 +2906,7 @@ else if (NrLanes == 4)
         op_o_flat[248 +: 8] = op_i_flat[184 +: 8];
       end
       {EW64, EW64, 5'd1, 1'b0}: begin
-        op_o_flat[0 +: 8] = op_i_flat[64 +: 8];
+        op_o_flat[0 +: 8] = op_i_flat[64 +: 8]; //one by one bytes goes to the other lane. slide by one element
         op_o_flat[8 +: 8] = op_i_flat[72 +: 8];
         op_o_flat[16 +: 8] = op_i_flat[80 +: 8];
         op_o_flat[24 +: 8] = op_i_flat[88 +: 8];

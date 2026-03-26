@@ -1,0 +1,34 @@
+
+==========
+=  DOTP  =
+==========
+
+
+Calulating 64b dotp with vectors with length = 8
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 64b dotp with vectors with length = 64
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 32b dotp with vectors with length = 8
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 32b dotp with vectors with length = 64
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 16b dotp with vectors with length = 8
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 16b dotp with vectors with length = 64
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 8b dotp with vectors with length = 8
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 8b dotp with vectors with length = 64
+Vector runtime: 0
+Scalar runtime: 0
+Calulating 8b dotp with vectors with length = 512
+Vector runtime: 0
+Scalar runtime: 0
+SUCCESS.

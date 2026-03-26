@@ -50,7 +50,7 @@ void softmax(const float *i, const float *o, const float *buf,
     size_t srcOffset = outerDim * outerStep;
     size_t bufOffset = outerDim * cnStep;
 
-    memcpy(bufPtr + bufOffset, srcPtr + srcOffset, innerSize * sizeof(float));
+    memcpy(bufPtr + bufOffset, srcPtr + srcOffset, innerSize * sizeof(float)); //cp from sc to bf only the 1st channel
 
     for (size_t cnDim = 1; cnDim < channels; cnDim++) {
       for (size_t i = 0; i < innerSize; i++) {
@@ -67,7 +67,7 @@ void softmax(const float *i, const float *o, const float *buf,
       for (size_t cnDim = 0; cnDim < channels; cnDim++) {
         const int offset = srcOffset + cnDim * cnStep;
         for (size_t i = 0; i < innerSize; i++)
-          dstPtr[offset + i] = srcPtr[offset + i] - bufPtr[bufOffset + i];
+          dstPtr[offset + i] = srcPtr[offset + i] - bufPtr[bufOffset + i]; // <--- (xi-max) ekthetis
       }
     }
 
@@ -92,7 +92,7 @@ void softmax(const float *i, const float *o, const float *buf,
         bufPtr[bufOffset + i] = 0.f;
 
       for (size_t cnDim = 0; cnDim < channels; cnDim++) {
-        const int offset = srcOffset + cnDim * cnStep;
+        const int offset = srcOffset + cnDim * cnStep; //cnStep=inner_size=no_elements
         for (size_t i = 0; i < innerSize; i++)
           bufPtr[bufOffset + i] += dstPtr[offset + i];
       }
@@ -144,7 +144,8 @@ void softmax_vec(const float *i, const float *o, uint64_t channels,
   for (vl = __riscv_vsetvl_e32m1(avl); avl > 0; avl -= vl) {
 
     vl = __riscv_vsetvl_e32m1(avl);
-
+    //avl the elements that we still not finished
+    
     /*
       Calculate the maximum along the channel dimension
     */

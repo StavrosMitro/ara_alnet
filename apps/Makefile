@@ -51,6 +51,10 @@ bin/fft:  ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
 bin/fft%: ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
 endif
 
+# AlexNet default profile: training, batchsize=25, static batch=25, epochs=1
+bin/alexnet:  ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=25 -DALEXNET_STATIC_MAX_BATCH=25 -DALEXNET_EPOCHS=1
+bin/alexnet%: ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=25 -DALEXNET_STATIC_MAX_BATCH=25 -DALEXNET_EPOCHS=1
+
 all: $(BINARIES)
 
 # Pre-process the linker-script to correclty align the sections

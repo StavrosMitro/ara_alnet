@@ -5,7 +5,7 @@ OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
 MEMORY {
-  L2 : ORIGIN = 0x80000000, LENGTH = 0x02000000
+  L2 : ORIGIN = 0x80000000, LENGTH = 0x20000000 /* 32mb */
 }
 
 /*
