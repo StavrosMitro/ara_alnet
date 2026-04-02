@@ -5,10 +5,22 @@
 //
 #include <stdlib.h>
 #include <string.h>
+#include "alexnet.h"
 // #include <immintrin.h> 
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 
 // I REMOVED IT, BECAUSE IT IS FOR X86 ASSEMBLY
+
+// Workspace used by matrix_transpose to avoid large stack allocations.
+// Sized conservatively for current AlexNet transpose use cases.
+#define MATRIX_TRANSPOSE_WORKSPACE_ELEMS 2000000
+static float matrix_transpose_workspace[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 
 /*
 // 
@@ -100,7 +112,12 @@ void matrix_transpose(float *x, int m, int n)
      * Output:
      *      x[n,m]
      * */
-    float *tmp = (float *)malloc(m*n*sizeof(float));
+    size_t elems = (size_t)m * (size_t)n;
+    if (elems > MATRIX_TRANSPOSE_WORKSPACE_ELEMS) {
+        printf_("Error: matrix_transpose workspace too small for %d x %d\n", m, n);
+        exit(1);
+    }
+    float *tmp = matrix_transpose_workspace;
     register int i, j;
     register float *ptr = x;
     for (i = 0; i < m; i++)
@@ -108,6 +125,6 @@ void matrix_transpose(float *x, int m, int n)
         for (j = 0; j < n; j++)
             tmp[j*m+i] = *(ptr++);
     }
-    memcpy(x, tmp, m*n*sizeof(float));
-    free(tmp);
+    memcpy(x, tmp, elems * sizeof(float));
+    return;
 }

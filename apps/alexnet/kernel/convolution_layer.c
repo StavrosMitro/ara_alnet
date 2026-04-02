@@ -6,7 +6,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#ifdef SPIKE
 #include "printf.h"
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
+#include "printf.h"
+#endif
 #include "convolution_layer.h"
 #include "matrix.h"
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -20,6 +26,7 @@ static float conv5_input_col_full[CONV5_INPUT_COL_SIZE];
 static float conv_t_dweights_scratch[CONV_MAX_T_DWEIGHTS];
 static float conv_d_out_copy_scratch[CONV_MAX_DOCOPY];
 static float conv_d_x_col_scratch[CONV_MAX_DXCOL];
+static float conv_weights_t_scratch[CONV_MAX_T_DWEIGHTS];
 
 static float *conv_forward_xcol_ptr(conv_op *op, short batch_id)
 {
@@ -33,7 +40,7 @@ static float *conv_forward_xcol_ptr(conv_op *op, short batch_id)
         case 3: return conv3_xcol_scratch;
         case 4: return conv4_xcol_scratch;
         default:
-            printf("Error: invalid conv layer_id=%d\n", op->layer_id);
+            printf_("Error: invalid conv layer_id=%d\n", op->layer_id);
             exit(1);
     }
 }
@@ -161,7 +168,7 @@ void conv_op_forward(conv_op *op)
      * */
     if (op->layer_id == 5) {
         if (op->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-            printf("Error: conv5 batchsize %d exceeds static max %d\n", op->batchsize, ALEXNET_STATIC_MAX_BATCH);
+            printf_("Error: conv5 batchsize %d exceeds static max %d\n", op->batchsize, ALEXNET_STATIC_MAX_BATCH);
             exit(1);
         }
         op->input_col = conv5_input_col_full;
@@ -266,7 +273,10 @@ void conv_op_backward_full(conv_op *op)
     }
 
     // calculate delta_input per sample
-    float conv_weights_t_scratch[ikk * oc];
+    if (ikk * oc > CONV_MAX_T_DWEIGHTS) {
+        printf_("Error: conv weights transpose workspace overflow (%d)\n", ikk * oc);
+        exit(1);
+    }
     float *weights_T = conv_weights_t_scratch;
     memcpy(weights_T, op->weights, ikk * oc * sizeof(float));
     matrix_transpose(weights_T, ikk, oc);
@@ -293,7 +303,10 @@ void conv_op_backward_input_only(conv_op *op)
     int oc   = op->out_channels;
     int ikk  = op->in_channels * op->kernel_size * op->kernel_size;
     int owoh = op->out_w * op->out_h;
-    float conv_weights_t_scratch[ikk * oc];
+    if (ikk * oc > CONV_MAX_T_DWEIGHTS) {
+        printf_("Error: conv weights transpose workspace overflow (%d)\n", ikk * oc);
+        exit(1);
+    }
     float *weights_T = conv_weights_t_scratch;
     memcpy(weights_T, op->weights, ikk * oc * sizeof(float));
     matrix_transpose(weights_T, ikk, oc);

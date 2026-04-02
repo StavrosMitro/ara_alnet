@@ -6,7 +6,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 #include "fc_layer.h"
 #include "matrix.h"
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -31,7 +37,7 @@ static void fc_op_forward_range(void *argv)
     memcpy(&args, (fc_args *)argv, sizeof(fc_args));
     short internal   = args.ed_tunits - args.st_tunits;
     if (internal > FC_MAX_INTERNAL || args.op->in_units > FC_MAX_IN_UNITS || args.op->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: FC scratch bounds exceeded (internal=%d, in_units=%d, batch=%d)\n",
+        printf_("Error: FC scratch bounds exceeded (internal=%d, in_units=%d, batch=%d)\n",
                (int)internal, args.op->in_units, args.op->batchsize);
         exit(1);
     }

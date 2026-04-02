@@ -5,14 +5,20 @@
 //
 // #include <stdlib.h>
 #include <stdio.h>
-#include <assert.h>
+// #include <assert.h>
 #include <string.h>
 #include "data.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "image_inference.h"
 #include "cifar10_dataset.h"
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 
 
 #define CIFAR10_W 32
@@ -37,17 +43,17 @@ void make_image(image *img, int w, int h, int c)
      * Output:
      *      img
      * */
-    // printf("entering make_image\n");
+    // printf_("entering make_image\n");
     img->w = w;
     img->h = h;
     img->c = c;
     if (w * h * c > IMAGE_MAX_FLOATS) {
-        printf("Error! make_image requested %d floats, max supported is %d\n", w * h * c, IMAGE_MAX_FLOATS);
+        printf_("Error! make_image requested %d floats, max supported is %d\n", w * h * c, IMAGE_MAX_FLOATS);
         exit(1);
     }
     img->data = image_scratch[image_scratch_cursor];
     image_scratch_cursor = (image_scratch_cursor + 1) % IMAGE_SCRATCH_SLOTS;
-    // printf("malloc completed, no segmetation fault in make_image function\n");
+    // printf_("malloc completed, no segmetation fault in make_image function\n");
 }
 
 void free_image(image *img)
@@ -59,20 +65,20 @@ void free_image(image *img)
 
 static float get_pixel(image *img, unsigned int x, unsigned int y, unsigned int c)
 {
-    assert(x<(img->w) && y<(img->h) && c<(img->c));
+    // assert(x<(img->w) && y<(img->h) && c<(img->c));
     return img->data[c*img->w*img->h+y*img->w+x];
 }
 
 static void set_pixel(image *img, float value, unsigned int x, unsigned int y, unsigned int c)
 {
     if (x < 0 || y < 0 || c < 0 || x >= (img->w) || y >= (img->h) || c >= (img->c)) return;
-    assert(x<(img->w) && y<(img->h) && c<(img->c));
+    // assert(x<(img->w) && y<(img->h) && c<(img->c));
     img->data[c*(img->w)*(img->h)+y*(img->w)+x] = value;
 }
 
 static void add_pixel(image *img, float value, unsigned int x, unsigned int y, unsigned int c)
 {
-    assert(x<(img->w) && y<(img->h) && c<(img->c));
+    // assert(x<(img->w) && y<(img->h) && c<(img->c));
     img->data[c*(img->w)*(img->h)+y*(img->w)+x] += value;
 }
 
@@ -169,7 +175,7 @@ image load_image(const unsigned char *start_img, int W, int H, int channels, int
     const unsigned char *data = start_img;
     if (!data)
     {
-        printf("Error! Can't load image %p! \n", start_img);
+        printf_("Error! Can't load image %p! \n", start_img);
         image empty;
         int fallback_c = channels ? channels : img_data_c;
         make_image(&empty, W, H, fallback_c);
@@ -195,15 +201,15 @@ image load_image(const unsigned char *start_img, int W, int H, int channels, int
             }
         }
     }
-    // printf("inside load image before resizing the image\n");
+    // printf_("inside load image before resizing the image\n");
     if ((h&&w) && (H!=img.h || W!=img.w)) {
-        // printf("this image needs resizing\n");
+        // printf_("this image needs resizing\n");
         resize_image(&img, H, W);
     }
         
     
     if (is_h_flip) {
-        // printf("this image needs flipping\n");
+        // printf_("this image needs flipping\n");
         horizontal_flip(&img);
     }
 

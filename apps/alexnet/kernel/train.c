@@ -10,13 +10,59 @@
 #include <string.h>
 #include "alexnet.h"
 #include "data.h"
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
 // #define LEARNING_RATE 0.001
 #define LEARNING_RATE 0.01
+
+#ifdef SHOW_OP_TIME
+#ifndef ALEXNET_TIMER_HZ
+#define ALEXNET_TIMER_HZ 1000000000ULL
+#endif
+
+#ifndef ALEXNET_USE_RDCYCLE_TIMER
+#define ALEXNET_USE_RDCYCLE_TIMER 0
+#endif
+
+typedef struct {
+    uint64_t tv_sec;
+    uint64_t tv_nsec;
+} alexnet_timer_t;
+
+static inline void alexnet_timer_now(alexnet_timer_t *tp)
+{
+#if ALEXNET_USE_RDCYCLE_TIMER
+    uint64_t cycles = 0;
+    asm volatile ("rdcycle %0" : "=r"(cycles));
+    tp->tv_sec = cycles / ALEXNET_TIMER_HZ;
+    tp->tv_nsec = ((cycles % ALEXNET_TIMER_HZ) * 1000000000ULL) / ALEXNET_TIMER_HZ;
+#else
+    static uint64_t soft_ticks = 0;
+    soft_ticks++;
+    tp->tv_sec = soft_ticks / ALEXNET_TIMER_HZ;
+    tp->tv_nsec = soft_ticks % ALEXNET_TIMER_HZ;
+#endif
+}
+#endif
+
+#ifndef ALEXNET_MAX_STEPS
+#define ALEXNET_MAX_STEPS 0
+#endif
+
+#if defined(ALEXNET_LAYER_LOGS) && !defined(SPIKE)
+#define ALEXNET_LOG_LAYER(...) printf_(__VA_ARGS__)
+#else
+#define ALEXNET_LOG_LAYER(...)
+#endif
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
 #ifdef ALEXNET_BATCHSIZE
@@ -147,7 +193,7 @@ static void cross_entropy_loss(float *delta_preds, const float *preds, const int
         }
     }
     ce_loss /= BATCH_SIZE;
-    printf("cross entropy loss on batch data is %f \n", ce_loss);
+    ALEXNET_LOG_LAYER("cross entropy loss computed\n");
 }
 
 
@@ -389,7 +435,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     calloc_alexnet_d_params(net);
 
     if (net->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
+        printf_("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
         exit(1);
     }
 
@@ -401,6 +447,13 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     float *next_grad = d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_t start = {0};
+    alexnet_timer_t finish = {0};
+    double duration = 0.0;
+#endif
+
+#ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc3.d_input = next_grad;
     zero_f32(net->fc3.d_input, net->batchsize * net->fc3.in_units);
@@ -408,12 +461,13 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         fc_op_backward_full(&(net->fc3));
     else
         fc_op_backward_input_only(&(net->fc3));
+    ALEXNET_LOG_LAYER(" backward (&(net->fc3)) done\n");
     curr_grad = net->fc3.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->fc3)) duration: %.4fs \n", duration);
 #endif
 
     net->relu7.d_input = next_grad;
@@ -424,6 +478,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc2.d_input = next_grad;
     zero_f32(net->fc2.d_input, net->batchsize * net->fc2.in_units);
@@ -432,12 +487,13 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         fc_op_backward_full(&(net->fc2));
     else
         fc_op_backward_input_only(&(net->fc2));
+    ALEXNET_LOG_LAYER(" backward (&(net->fc2)) done\n");
     curr_grad = net->fc2.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->fc2)) duration: %.4fs \n", duration);
 #endif
 
     net->relu6.d_input = next_grad;
@@ -448,6 +504,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc1.d_input = next_grad;
     zero_f32(net->fc1.d_input, net->batchsize * net->fc1.in_units);
@@ -456,26 +513,29 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         fc_op_backward_full(&(net->fc1));
     else
         fc_op_backward_input_only(&(net->fc1));
+    ALEXNET_LOG_LAYER(" backward (&(net->fc1)) done\n");
     curr_grad = net->fc1.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->fc1)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->mp5.d_input = next_grad;
     zero_f32(net->mp5.d_input, net->batchsize * net->mp5.in_units);
     net->mp5.d_output = curr_grad;
     max_pooling_op_backward(&(net->mp5));
+    ALEXNET_LOG_LAYER(" backward (&(net->mp5)) done\n");
     curr_grad = net->mp5.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->mp5)) duration: %.4fs \n", duration);
 #endif
 
     net->relu5.d_input = next_grad;
@@ -486,6 +546,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn5.d_input = next_grad;
     zero_f32(net->bn5.d_input, net->batchsize * net->bn5.units);
@@ -494,24 +555,26 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         batch_norm_op_backward_full(&(net->bn5));
     else
         batch_norm_op_backward_input_only(&(net->bn5));
+    ALEXNET_LOG_LAYER(" backward (&(net->bn5)) done\n");
     curr_grad = net->bn5.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
     for(int i=0; i< net->batchsize * net->bn5.units; i++)
     {
         if(net->bn5.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn5  %f\n",net->bn5.d_input[i]);
+            printf_("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn5 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->bn5)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv5.d_input = next_grad;
     zero_f32(net->conv5.d_input, net->batchsize * net->conv5.in_units);
@@ -520,12 +583,13 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         conv_op_backward_full(&(net->conv5));
     else
         conv_op_backward_input_only(&(net->conv5));
+    ALEXNET_LOG_LAYER(" backward (&(net->conv5)) done\n");
     curr_grad = net->conv5.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->conv5)) duration: %.4fs \n", duration);
 #endif
 
     net->relu4.d_input = next_grad;
@@ -536,6 +600,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn4.d_input = next_grad;
     zero_f32(net->bn4.d_input, net->batchsize * net->bn4.units);
@@ -544,24 +609,26 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         batch_norm_op_backward_full(&(net->bn4));
     else
         batch_norm_op_backward_input_only(&(net->bn4));
+    ALEXNET_LOG_LAYER(" backward (&(net->bn4)) done\n");
     curr_grad = net->bn4.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->bn4)) duration: %.4fs \n", duration);
 #endif
 
     for(int i=0; i< net->batchsize * net->bn4.units; i++)
     {
         if(net->bn4.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn4  %f\n",net->bn4.d_input[i]);
+            ALEXNET_LOG_LAYER("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn4 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv4.d_input = next_grad;
     zero_f32(net->conv4.d_input, net->batchsize * net->conv4.in_units);
@@ -570,12 +637,13 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         conv_op_backward_full(&(net->conv4));
     else
         conv_op_backward_input_only(&(net->conv4));
+    ALEXNET_LOG_LAYER(" backward (&(net->conv4)) done\n");
     curr_grad = net->conv4.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->conv4)) duration: %.4fs \n", duration);
 #endif
 
     net->relu3.d_input = next_grad;
@@ -586,6 +654,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn3.d_input = next_grad;
     zero_f32(net->bn3.d_input, net->batchsize * net->bn3.units);
@@ -594,24 +663,26 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         batch_norm_op_backward_full(&(net->bn3));
     else
         batch_norm_op_backward_input_only(&(net->bn3));
+    ALEXNET_LOG_LAYER(" backward (&(net->bn3)) done\n");
     curr_grad = net->bn3.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->bn3)) duration: %.4fs \n", duration);
 #endif
 
     for(int i=0; i< net->batchsize * net->bn3.units; i++)
     {
         if(net->bn3.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn3  %f\n",net->bn3.d_input[i]);
+            ALEXNET_LOG_LAYER("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn3 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv3.d_input = next_grad;
     zero_f32(net->conv3.d_input, net->batchsize * net->conv3.in_units);
@@ -620,35 +691,38 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         conv_op_backward_full(&(net->conv3));
     else
         conv_op_backward_input_only(&(net->conv3));
+    ALEXNET_LOG_LAYER(" backward (&(net->conv3)) done\n");
     curr_grad = net->conv3.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->conv3)) duration: %.4fs \n", duration);
 #endif
 
     for(int i=0; i< net->batchsize * net->conv3.in_units; i++)
     {
         if(net->conv3.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! conv3  %f\n",net->conv3.d_input[i]);
+            ALEXNET_LOG_LAYER("!!!!!!!!!!!!!!!!!!!!!!!!!!! conv3 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->mp2.d_input = next_grad;
     zero_f32(net->mp2.d_input, net->batchsize * net->mp2.in_units);
     net->mp2.d_output = curr_grad;
     max_pooling_op_backward(&(net->mp2));
+    ALEXNET_LOG_LAYER(" backward (&(net->mp2)) done\n");
     curr_grad = net->mp2.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->mp2)) duration: %.4fs \n", duration);
 #endif
 
     net->relu2.d_input = next_grad;
@@ -659,6 +733,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn2.d_input = next_grad;
     zero_f32(net->bn2.d_input, net->batchsize * net->bn2.units);
@@ -667,24 +742,26 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         batch_norm_op_backward_full(&(net->bn2));
     else
         batch_norm_op_backward_input_only(&(net->bn2));
+    ALEXNET_LOG_LAYER(" backward (&(net->bn2)) done\n");
     curr_grad = net->bn2.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->bn2)) duration: %.4fs \n", duration);
 #endif
 
     for(int i=0; i< net->batchsize * net->bn2.units; i++)
     {
         if(net->bn2.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn2  %f\n",net->bn2.d_input[i]);
+            ALEXNET_LOG_LAYER("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn2 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv2.d_input = next_grad;
     zero_f32(net->conv2.d_input, net->batchsize * net->conv2.in_units);
@@ -693,26 +770,29 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         conv_op_backward_full(&(net->conv2));
     else
         conv_op_backward_input_only(&(net->conv2));
+    ALEXNET_LOG_LAYER(" backward (&(net->conv2)) done\n");
     curr_grad = net->conv2.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->conv2)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->mp1.d_input = next_grad;
     zero_f32(net->mp1.d_input, net->batchsize * net->mp1.in_units);
     net->mp1.d_output = curr_grad;
     max_pooling_op_backward(&(net->mp1));
+    ALEXNET_LOG_LAYER(" backward (&(net->mp1)) done\n");
     curr_grad = net->mp1.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->mp1)) duration: %.4fs \n", duration);
 #endif
 
     net->relu1.d_input = next_grad;
@@ -723,6 +803,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn1.d_input = next_grad;
     zero_f32(net->bn1.d_input, net->batchsize * net->bn1.units);
@@ -731,24 +812,26 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         batch_norm_op_backward_full(&(net->bn1));
     else
         batch_norm_op_backward_input_only(&(net->bn1));
+    ALEXNET_LOG_LAYER(" backward (&(net->bn1)) done\n");
     curr_grad = net->bn1.d_input;
     next_grad = (next_grad == d_grad_ping_0) ? d_grad_ping_1 : d_grad_ping_0;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->bn1)) duration: %.4fs \n", duration);
 #endif
 
     for(int i=0; i< net->batchsize * net->bn1.units; i++)
     {
         if(net->bn1.d_input[i] > 4)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn1  %f\n",net->bn1.d_input[i]);
+            ALEXNET_LOG_LAYER("!!!!!!!!!!!!!!!!!!!!!!!!!!! bn1 threshold hit at idx %d\n", i);
             break;
         }
     }
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv1.d_input = next_grad;
     zero_f32(net->conv1.d_input, net->batchsize * net->conv1.in_units);
@@ -757,20 +840,23 @@ void backward_alexnet(alexnet *net, int *batch_Y)
         conv_op_backward_full(&(net->conv1));
     else
         conv_op_backward_input_only(&(net->conv1));
+    ALEXNET_LOG_LAYER(" backward (&(net->conv1)) done\n");
     curr_grad = net->conv1.d_input;
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward (&(net->conv1)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     gradient_descent(net);
+    ALEXNET_LOG_LAYER(" backward update_params(net) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" backward update_params(net) duration: %.4fs \n", duration);
 #endif
 
     free_alexnet_d_params(net);
@@ -780,7 +866,7 @@ void backward_alexnet(alexnet *net, int *batch_Y)
 void alexnet_train(alexnet *net, int epochs)
 {
     if (net->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
+        printf_("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
         exit(1);
     }
 
@@ -792,14 +878,16 @@ void alexnet_train(alexnet *net, int epochs)
     int steps_per_epoch = dataset_count / net->batchsize;
     if (dataset_count % net->batchsize) steps_per_epoch++;
     if (steps_per_epoch <= 0) steps_per_epoch = 1;
+    if (ALEXNET_MAX_STEPS > 0 && steps_per_epoch > ALEXNET_MAX_STEPS)
+        steps_per_epoch = ALEXNET_MAX_STEPS;
 
-    printf("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>> training begin >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+    ALEXNET_LOG_LAYER("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>> training begin >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     for (int e = 0; e < epochs; e++)
     {
-        printf("============================= epoch %d / %d =============================\n", e+1, epochs);
+        ALEXNET_LOG_LAYER("============================= epoch %d / %d =============================\n", e+1, epochs);
         for (int b = 0; b < steps_per_epoch; b++)
         {
-            printf("-----------------------------step %d / %d---------------------------------\n", b+1, steps_per_epoch);
+            ALEXNET_LOG_LAYER("-----------------------------step %d / %d---------------------------------\n", b+1, steps_per_epoch);
 
             // get_same_batch(net->batchsize, net->input, batch_Y,
             //                net->conv1.in_w, net->conv1.in_h, net->conv1.in_channels, net->fc3.out_units);
@@ -813,21 +901,21 @@ void alexnet_train(alexnet *net, int epochs)
                 preds[i] = argmax(net->output + i * net->fc3.out_units, net->fc3.out_units);
 
 #ifdef SHOW_PREDCITION_DETAIL
-            printf("pred[ ");
+            printf_("pred[ ");
             for (int i = 0; i < net->batchsize; i++)
-                printf("%d ", preds[i]);
-            printf("]  label[ ");
+                printf_("%d ", preds[i]);
+            printf_("]  label[ ");
             for (int i = 0; i < net->batchsize; i++)
-                printf("%d ", batch_Y[i]);
-            printf("]\n");
+                printf_("%d ", batch_Y[i]);
+            printf_("]\n");
 #endif
             compute_batch_metrics(preds, batch_Y, net->batchsize);
 
             backward_alexnet(net, batch_Y);
         }
-        printf("============================= epoch %d / %d end =============================\n", e+1, epochs);
+        ALEXNET_LOG_LAYER("============================= epoch %d / %d end =============================\n", e+1, epochs);
     }
-    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> training end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
+    ALEXNET_LOG_LAYER(">>>>>>>>>>>>>>>>>>>>>>>>>>> training end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     (void)batch_Y;
     (void)preds;
@@ -836,7 +924,7 @@ void alexnet_train(alexnet *net, int epochs)
 void alexnet_test(alexnet *net)
 {
     if (net->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
+        printf_("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
         exit(1);
     }
 
@@ -846,7 +934,7 @@ void alexnet_test(alexnet *net)
     // In-memory one-batch evaluation (same data source path as training).
     int steps = 1;
 
-    printf(">>>>>>>>>>>>>>>>>>>>>>>>>> start test pass >>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
+    printf_(">>>>>>>>>>>>>>>>>>>>>>>>>> start test pass >>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     // allocate a fresh input buffer for the test pass
     float *test_input = test_input_buf;
@@ -862,7 +950,7 @@ void alexnet_test(alexnet *net)
                        net->conv1.in_w, net->conv1.in_h, net->conv1.in_channels, net->fc3.out_units);
 
         forward_alexnet(net);
-        printf("batch %d/%d  forward done\n", b+1, steps);
+        printf_("batch %d/%d  forward done\n", b+1, steps);
 
         for (int i = 0; i < net->batchsize; i++)
             preds[i] = argmax(net->output + i * net->fc3.out_units, net->fc3.out_units);
@@ -870,16 +958,16 @@ void alexnet_test(alexnet *net)
         free_forward_activations(net);   // release all layer outputs allocated by forward
 
 #ifdef SHOW_PREDCITION_DETAIL
-        printf("pred[ ");
+        printf_("pred[ ");
         for (int i = 0; i < net->batchsize; i++)
-            printf("%d ", preds[i]);
-        printf("]  label[ ");
+            printf_("%d ", preds[i]);
+        printf_("]  label[ ");
         for (int i = 0; i < net->batchsize; i++)
-            printf("%d ", batch_Y[i]);
-        printf("]\n");
+            printf_("%d ", batch_Y[i]);
+        printf_("]\n");
 #endif
 
-        printf("Test batch %d/%d stats\n", b+1, steps);
+        printf_("Test batch %d/%d stats\n", b+1, steps);
         compute_batch_metrics(preds, batch_Y, net->batchsize);
 
         for (int i = 0; i < net->batchsize; i++)
@@ -887,9 +975,9 @@ void alexnet_test(alexnet *net)
         total_seen += net->batchsize;
     }
 
-    printf("\n--- Overall test results: %d / %d correct  (accuracy %.4f) ---\n",
+    printf_("\n--- Overall test results: %d / %d correct  (accuracy %.4f) ---\n",
            total_correct, total_seen, (float)total_correct / total_seen);
-    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> test pass end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
+    printf_(">>>>>>>>>>>>>>>>>>>>>>>>>>> test pass end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     (void)test_input;
     net->input = saved_input;
@@ -905,7 +993,7 @@ void compute_batch_metrics(const int *preds, const int *labels, int batchsize)
     for (int i = 0; i < batchsize; i++)
         if (preds[i] == labels[i]) correct++;
     float accuracy = (float)correct / batchsize;
-    printf("batch accuracy:  %.4f  (%d / %d correct)\n", accuracy, correct, batchsize);
+    printf_("batch accuracy:  %.4f  (%d / %d correct)\n", accuracy, correct, batchsize);
 
     // Macro-averaged F1 score over classes present in this batch
     int true_pos[OUT_LAYER], false_pos[OUT_LAYER], false_neg[OUT_LAYER];
@@ -935,5 +1023,5 @@ void compute_batch_metrics(const int *preds, const int *labels, int batchsize)
         }
     }
     float macro_f1 = (class_count > 0) ? f1_sum / class_count : 0.0f;
-    printf("batch macro F1:  %.4f  (over %d classes)\n", macro_f1, class_count);
+    printf_("batch macro F1:  %.4f  (over %d classes)\n", macro_f1, class_count);
 }

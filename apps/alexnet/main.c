@@ -5,23 +5,65 @@
 //
 #include <stdlib.h>
 #include <math.h>
-#include <assert.h>
+// #include <assert.h>
 #include <stdint.h>
 #include "kernel/alexnet.h"
 #include "kernel/weights.h"
 #include "kernel/image_inference.h"
 #include "kernel/cifar10_dataset.h"
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 
 #if !defined(ALEXNET_MODE_TRAIN) && !defined(ALEXNET_MODE_INFERENCE)
 #define ALEXNET_MODE_TRAIN
+#endif
+
+#if defined(ALEXNET_LAYER_LOGS) && !defined(SPIKE)
+#define ALEXNET_LOG_LAYER(...) printf_(__VA_ARGS__)
+#else
+#define ALEXNET_LOG_LAYER(...)
+#endif
+
+#ifdef SHOW_OP_TIME
+#ifndef ALEXNET_TIMER_HZ
+#define ALEXNET_TIMER_HZ 1000000000ULL
+#endif
+
+#ifndef ALEXNET_USE_RDCYCLE_TIMER
+#define ALEXNET_USE_RDCYCLE_TIMER 0
+#endif
+
+typedef struct {
+    uint64_t tv_sec;
+    uint64_t tv_nsec;
+} alexnet_timer_t;
+
+static inline void alexnet_timer_now(alexnet_timer_t *tp)
+{
+#if ALEXNET_USE_RDCYCLE_TIMER
+    uint64_t cycles = 0;
+    asm volatile ("rdcycle %0" : "=r"(cycles));
+    tp->tv_sec = cycles / ALEXNET_TIMER_HZ;
+    tp->tv_nsec = ((cycles % ALEXNET_TIMER_HZ) * 1000000000ULL) / ALEXNET_TIMER_HZ;
+#else
+    static uint64_t soft_ticks = 0;
+    soft_ticks++;
+    tp->tv_sec = soft_ticks / ALEXNET_TIMER_HZ;
+    tp->tv_nsec = soft_ticks % ALEXNET_TIMER_HZ;
+#endif
+}
 #endif
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
 #ifdef ALEXNET_BATCHSIZE
 #define ALEXNET_STATIC_MAX_BATCH ALEXNET_BATCHSIZE
 #else
-#define ALEXNET_STATIC_MAX_BATCH 400
+#define ALEXNET_STATIC_MAX_BATCH 1
 #endif
 #endif
 
@@ -67,6 +109,19 @@ static void zero_f32(float *buf, int n)
 
 void __libc_init_array(void) {}
 void __libc_fini_array(void) {}
+
+#ifdef SPIKE
+extern volatile uint64_t tohost;
+
+uintptr_t handle_trap(uintptr_t cause, uintptr_t epc, uintptr_t regs[32])
+{
+    (void)epc;
+    (void)regs;
+    uintptr_t code = 0x200 + (cause & 0x3ff);
+    tohost = (code << 1) | 1;
+    while (1) {}
+}
+#endif
 
 void metrics(float *ret, int *preds, int *labels, 
                 int classes, int totNum, int type)
@@ -185,7 +240,7 @@ int argmax(float *arr, int n)
             max = arr[p];
         }
     }
-    assert(idx!=-1);
+    // assert(idx!=-1);
     return idx;
 }
 
@@ -193,35 +248,43 @@ int argmax(float *arr, int n)
 void forward_alexnet(alexnet *net)
 {
     if (net->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
+        printf_("Error: batchsize %d exceeds static max batch %d\n", net->batchsize, ALEXNET_STATIC_MAX_BATCH);
         exit(1);
     }
 
+#ifdef SHOW_OP_TIME
+    alexnet_timer_t start = {0};
+    alexnet_timer_t finish = {0};
+    double duration = 0.0;
+#endif
+
     net->conv1.input = net->input;
 
-    //printf(">>>>>>>>>>>>>>>>>>conv1>>>>>>>>>>>>>>>>>>>>>>>>> \n");
+    //printf_(">>>>>>>>>>>>>>>>>>conv1>>>>>>>>>>>>>>>>>>>>>>>>> \n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
-    printf("%d\n", net->batchsize);
     net->conv1.output = act_conv1;
     zero_f32(net->conv1.output, net->batchsize * net->conv1.out_units);
     conv_op_forward(&(net->conv1));
+    ALEXNET_LOG_LAYER(" forward (&(net->conv1)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->conv1)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
-    printf("%d\n", net->batchsize);
     net->bn1.output = act_bn1;
     net->bn1.input = net->conv1.output;
     batch_norm_op_forward(&(net->bn1));
+    ALEXNET_LOG_LAYER(" forward (&(net->bn1)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->bn1)) duration: %.4fs \n", duration);
 #endif
 
     net->relu1.output = act_relu1;
@@ -232,28 +295,32 @@ void forward_alexnet(alexnet *net)
     net->mp1.input = net->relu1.output;
     max_pooling_op_forward(&(net->mp1));
 
-    //printf(">>>>>>>>>>>>>>>>>>conv2>>>>>>>>>>>>>>>>>>>>>>>>> \n");
+    //printf_(">>>>>>>>>>>>>>>>>>conv2>>>>>>>>>>>>>>>>>>>>>>>>> \n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv2.output = act_conv2;
     zero_f32(net->conv2.output, net->batchsize * net->conv2.out_units);
     net->conv2.input = net->mp1.output;
     conv_op_forward(&(net->conv2));
+    ALEXNET_LOG_LAYER(" forward (&(net->conv2)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->conv2)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn2.output = act_bn2;
     net->bn2.input = net->conv2.output;
     batch_norm_op_forward(&(net->bn2));
+    ALEXNET_LOG_LAYER(" forward (&(net->bn2)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->bn2)) duration: %.4fs \n", duration);
 #endif
 
     net->relu2.output = act_relu2;
@@ -265,83 +332,95 @@ void forward_alexnet(alexnet *net)
     max_pooling_op_forward(&(net->mp2));
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
-    //printf(">>>>>>>>>>>>>>>>>>conv3>>>>>>>>>>>>>>>>>>>>>>>>> \n");
+    //printf_(">>>>>>>>>>>>>>>>>>conv3>>>>>>>>>>>>>>>>>>>>>>>>> \n");
     net->conv3.output = act_conv3;
     zero_f32(net->conv3.output, net->batchsize * net->conv3.out_units);
     net->conv3.input = net->mp2.output;
     conv_op_forward(&(net->conv3));
+    ALEXNET_LOG_LAYER(" forward (&(net->conv3)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->conv3)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn3.output = act_bn3;
     net->bn3.input = net->conv3.output;
     batch_norm_op_forward(&(net->bn3));
+    ALEXNET_LOG_LAYER(" forward (&(net->bn3)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->bn3)); duration: %.4fs \n", duration);
 #endif
 
     net->relu3.output = act_relu3;
     net->relu3.input = net->bn3.output;
     relu_op_forward(&(net->relu3));
 
-    //printf(">>>>>>>>>>>>>>>>>>conv4>>>>>>>>>>>>>>>>>>>>>>>>> \n");
+    //printf_(">>>>>>>>>>>>>>>>>>conv4>>>>>>>>>>>>>>>>>>>>>>>>> \n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv4.output = act_conv4;
     zero_f32(net->conv4.output, net->batchsize * net->conv4.out_units);
     net->conv4.input = net->relu3.output;
     conv_op_forward(&(net->conv4));
+    ALEXNET_LOG_LAYER(" forward (&(net->conv4)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->conv4)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn4.output = act_bn4;
     net->bn4.input = net->conv4.output;
     batch_norm_op_forward(&(net->bn4));
+    ALEXNET_LOG_LAYER(" forward (&(net->bn4)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->bn4)) duration: %.4fs \n", duration);
 #endif
 
     net->relu4.output = act_relu4;
     net->relu4.input = net->bn4.output;
     relu_op_forward(&(net->relu4));
 
-    //printf(">>>>>>>>>>>>>>>>>>conv5>>>>>>>>>>>>>>>>>>>>>>>>> \n");
+    //printf_(">>>>>>>>>>>>>>>>>>conv5>>>>>>>>>>>>>>>>>>>>>>>>> \n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->conv5.output = act_conv5;
     zero_f32(net->conv5.output, net->batchsize * net->conv5.out_units);
     net->conv5.input = net->relu4.output;
     conv_op_forward(&(net->conv5));
+    ALEXNET_LOG_LAYER(" forward (&(net->conv5)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->conv5)) duration: %.4fs \n", duration);
 #endif
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->bn5.output = act_bn5;
     net->bn5.input = net->conv5.output;
     batch_norm_op_forward(&(net->bn5));
+    ALEXNET_LOG_LAYER(" forward (&(net->bn5)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->bn5)) duration: %.4fs \n", duration);
 #endif
 
     net->relu5.output = act_relu5;
@@ -356,15 +435,17 @@ void forward_alexnet(alexnet *net)
     dropout(net->mp5.output, DROPOUT_PROB, net->mp5.batchsize * net->mp5.out_units);
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc1.output = act_fc1;
     zero_f32(net->fc1.output, net->batchsize * net->fc1.out_units);
     net->fc1.input = net->mp5.output;
     fc_op_forward(&(net->fc1));
+    ALEXNET_LOG_LAYER(" forward (&(net->fc1)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->fc1)) duration: %.4fs \n", duration);
 #endif
 
     net->relu6.output = act_relu6;
@@ -374,22 +455,25 @@ void forward_alexnet(alexnet *net)
     dropout(net->relu6.output, DROPOUT_PROB, net->relu6.batchsize * net->relu6.units);
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc2.output = act_fc2;
     zero_f32(net->fc2.output, net->batchsize * net->fc2.out_units);
     net->fc2.input = net->relu6.output;
     fc_op_forward(&(net->fc2));
+    ALEXNET_LOG_LAYER(" forward (&(net->fc2)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->fc2)) duration: %.4fs \n", duration);
+    // printf_(" forward (&(net->fc2)) done\n");
 #endif
 
     for(int p=0; p< net->fc2.out_units * net->batchsize; p++)
     {
         if(net->fc2.output[p]<(0-64) | net->fc2.output[p]>64)
         {
-            printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!Forward: fc2 too big/small !!! %f \n", net->fc2.output[p]);
+            printf_("!!!!!!!!!!!!!!!!!!!!!!!!!!!!Forward: fc2 too big/small at idx %d\n", p);
             break;
         }
     }
@@ -399,15 +483,17 @@ void forward_alexnet(alexnet *net)
     relu_op_forward(&(net->relu7));
 
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&start);
 #endif
     net->fc3.output = act_fc3;
     zero_f32(net->fc3.output, net->batchsize * net->fc3.out_units);
     net->fc3.input = net->relu7.output;
     fc_op_forward(&(net->fc3));
+    ALEXNET_LOG_LAYER(" forward (&(net->fc3)) done\n");
 #ifdef SHOW_OP_TIME
+    alexnet_timer_now(&finish);
     duration = (finish.tv_sec - start.tv_sec);
     duration += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf(" forward (&(net->fc3) duration: %.4fs \n", duration);
 #endif
 
     net->output = net->fc3.output;
@@ -597,7 +683,7 @@ void save_alexnet(alexnet *net)
     // save_batchnorm_weights(&(net->bn4), fp);
     // save_batchnorm_weights(&(net->bn5), fp);
     // fclose(fp);
-    printf("NOT SAVED WEIGHTS\n");
+    printf_("NOT SAVED WEIGHTS\n");
 }
 
 // static uint64_t checksum_f32(const float *arr, size_t n)
@@ -622,7 +708,7 @@ static int verify_weight_array_shapes(void)
             size_t got = sizeof(name) / sizeof((name)[0]); \
             size_t exp = (size_t)(expected); \
             if (got != exp) { \
-                printf("[shape-error] %s: got=%zu expected=%zu\\n", #name, got, exp); \
+                printf_("[shape-error] %s: got=%zu expected=%zu\\n", #name, got, exp); \
                 ok = 0; \
             } \
         } while (0)
@@ -662,14 +748,14 @@ static int verify_weight_array_shapes(void)
 
 // static void print_weight_checksums(void)
 // {
-//     printf("Weight checksums (FNV1a64):\n");
-//     printf("  conv1_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv1_weights, sizeof(conv1_weights)/sizeof(conv1_weights[0])));
-//     printf("  conv4_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv4_weights, sizeof(conv4_weights)/sizeof(conv4_weights[0])));
-//     printf("  conv5_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv5_weights, sizeof(conv5_weights)/sizeof(conv5_weights[0])));
-//     printf("  fc2_weights:   0x%016llx\n", (unsigned long long)checksum_f32(fc2_weights, sizeof(fc2_weights)/sizeof(fc2_weights[0])));
-//     printf("  fc3_weights:   0x%016llx\n", (unsigned long long)checksum_f32(fc3_weights, sizeof(fc3_weights)/sizeof(fc3_weights[0])));
-//     printf("  bn4_gamma:     0x%016llx\n", (unsigned long long)checksum_f32(bn4_gamma, sizeof(bn4_gamma)/sizeof(bn4_gamma[0])));
-//     printf("  bn5_gamma:     0x%016llx\n", (unsigned long long)checksum_f32(bn5_gamma, sizeof(bn5_gamma)/sizeof(bn5_gamma[0])));
+//     printf_("Weight checksums (FNV1a64):\n");
+//     printf_("  conv1_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv1_weights, sizeof(conv1_weights)/sizeof(conv1_weights[0])));
+//     printf_("  conv4_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv4_weights, sizeof(conv4_weights)/sizeof(conv4_weights[0])));
+//     printf_("  conv5_weights: 0x%016llx\n", (unsigned long long)checksum_f32(conv5_weights, sizeof(conv5_weights)/sizeof(conv5_weights[0])));
+//     printf_("  fc2_weights:   0x%016llx\n", (unsigned long long)checksum_f32(fc2_weights, sizeof(fc2_weights)/sizeof(fc2_weights[0])));
+//     printf_("  fc3_weights:   0x%016llx\n", (unsigned long long)checksum_f32(fc3_weights, sizeof(fc3_weights)/sizeof(fc3_weights[0])));
+//     printf_("  bn4_gamma:     0x%016llx\n", (unsigned long long)checksum_f32(bn4_gamma, sizeof(bn4_gamma)/sizeof(bn4_gamma[0])));
+//     printf_("  bn5_gamma:     0x%016llx\n", (unsigned long long)checksum_f32(bn5_gamma, sizeof(bn5_gamma)/sizeof(bn5_gamma[0])));
 // }
 
 //
@@ -682,7 +768,7 @@ static int verify_weight_array_shapes(void)
 //      * */
 //     FILE *fp = fopen(filename, "rb");
 //     if (fp == NULL) {
-//         fprintf(stderr, "Error: Cannot open weights file \"%s\"\n", filename);
+//         fprintf_(stderr, "Error: Cannot open weights file \"%s\"\n", filename);
 //         exit(1);
 //     }
 //     load_conv_weights(&(net->conv1), fp);
@@ -699,7 +785,7 @@ static int verify_weight_array_shapes(void)
 //     load_batchnorm_weights(&(net->bn4), fp);
 //     load_batchnorm_weights(&(net->bn5), fp);
 //     fclose(fp);
-//     printf("Load weights from \"%s\" successfully... \n", filename);
+//     printf_("Load weights from \"%s\" successfully... \n", filename);
 // }
 
 void load_alexnet(alexnet *net)
@@ -710,13 +796,13 @@ void load_alexnet(alexnet *net)
     (void)net;
      
     if (!verify_weight_array_shapes()) {
-        printf("Fatal: weight array shape mismatch detected.\n");
+        printf_("Fatal: weight array shape mismatch detected.\n");
         exit(1);
     }
 
     // print_weight_checksums();
 
-    printf("Network pointers use weights.c arrays directly (no parameter buffer copy).\n");
+    printf_("Network pointers use weights.c arrays directly (no parameter buffer copy).\n");
 }
 
 void alexnet_set_all_trainable(alexnet *net, short trainable)
@@ -742,24 +828,24 @@ static void print_trainable_layers(const alexnet *net)
 {
     int enabled = 0;
 
-    printf("Trainable layers:\n");
-    printf("  conv1: %d\n", net->trainable.conv1); enabled += net->trainable.conv1 ? 1 : 0;
-    printf("  conv2: %d\n", net->trainable.conv2); enabled += net->trainable.conv2 ? 1 : 0;
-    printf("  conv3: %d\n", net->trainable.conv3); enabled += net->trainable.conv3 ? 1 : 0;
-    printf("  conv4: %d\n", net->trainable.conv4); enabled += net->trainable.conv4 ? 1 : 0;
-    printf("  conv5: %d\n", net->trainable.conv5); enabled += net->trainable.conv5 ? 1 : 0;
+    printf_("Trainable layers:\n");
+    printf_("  conv1: %d\n", net->trainable.conv1); enabled += net->trainable.conv1 ? 1 : 0;
+    printf_("  conv2: %d\n", net->trainable.conv2); enabled += net->trainable.conv2 ? 1 : 0;
+    printf_("  conv3: %d\n", net->trainable.conv3); enabled += net->trainable.conv3 ? 1 : 0;
+    printf_("  conv4: %d\n", net->trainable.conv4); enabled += net->trainable.conv4 ? 1 : 0;
+    printf_("  conv5: %d\n", net->trainable.conv5); enabled += net->trainable.conv5 ? 1 : 0;
 
-    printf("  bn1: %d\n", net->trainable.bn1); enabled += net->trainable.bn1 ? 1 : 0;
-    printf("  bn2: %d\n", net->trainable.bn2); enabled += net->trainable.bn2 ? 1 : 0;
-    printf("  bn3: %d\n", net->trainable.bn3); enabled += net->trainable.bn3 ? 1 : 0;
-    printf("  bn4: %d\n", net->trainable.bn4); enabled += net->trainable.bn4 ? 1 : 0;
-    printf("  bn5: %d\n", net->trainable.bn5); enabled += net->trainable.bn5 ? 1 : 0;
+    printf_("  bn1: %d\n", net->trainable.bn1); enabled += net->trainable.bn1 ? 1 : 0;
+    printf_("  bn2: %d\n", net->trainable.bn2); enabled += net->trainable.bn2 ? 1 : 0;
+    printf_("  bn3: %d\n", net->trainable.bn3); enabled += net->trainable.bn3 ? 1 : 0;
+    printf_("  bn4: %d\n", net->trainable.bn4); enabled += net->trainable.bn4 ? 1 : 0;
+    printf_("  bn5: %d\n", net->trainable.bn5); enabled += net->trainable.bn5 ? 1 : 0;
 
-    printf("  fc1: %d\n", net->trainable.fc1); enabled += net->trainable.fc1 ? 1 : 0;
-    printf("  fc2: %d\n", net->trainable.fc2); enabled += net->trainable.fc2 ? 1 : 0;
-    printf("  fc3: %d\n", net->trainable.fc3); enabled += net->trainable.fc3 ? 1 : 0;
+    printf_("  fc1: %d\n", net->trainable.fc1); enabled += net->trainable.fc1 ? 1 : 0;
+    printf_("  fc2: %d\n", net->trainable.fc2); enabled += net->trainable.fc2 ? 1 : 0;
+    printf_("  fc3: %d\n", net->trainable.fc3); enabled += net->trainable.fc3 ? 1 : 0;
 
-    printf("Total trainable layers: %d/13\n", enabled);
+    printf_("Total trainable layers: %d/13\n", enabled);
 }
 
 void setup_alexnet(alexnet *net, short batchsize)
@@ -768,7 +854,7 @@ void setup_alexnet(alexnet *net, short batchsize)
      * initialize alexnet
      * */
     net->batchsize = batchsize;
-    printf("batchsize in setup\n");
+    printf_("batchsize in setup\n");
     net->conv1.batchsize = batchsize;
     net->conv2.batchsize = batchsize;
     net->conv3.batchsize = batchsize;
@@ -1029,13 +1115,13 @@ int main(void)
     static alexnet net;
     
     #if defined(ALEXNET_MODE_TRAIN)
-    printf("batch size: %d \n", ALEXNET_BATCHSIZE);
-    printf("epochs: %d \n", ALEXNET_EPOCHS);
-    printf("net: %p\n", &net);
+    printf_("batch size: %d \n", ALEXNET_BATCHSIZE);
+    printf_("epochs: %d \n", ALEXNET_EPOCHS);
+    printf_("net: %p\n", &net);
     setup_alexnet(&net, ALEXNET_BATCHSIZE);
-    printf("setup finished\n");
+    printf_("setup finished\n");
     bind_alexnet_static_memory(&net);
-    printf("allocation of net struct\n");
+    printf_("allocation of net struct\n");
     alexnet_init_weights(&net);
 
     /* Train only selected layers: conv4, conv5, fc2, fc3 */
@@ -1052,20 +1138,20 @@ int main(void)
     const unsigned char *infer_bytes = img_data;
     if (ALEXNET_INFER_IDX >= 0) {
         if (ALEXNET_INFER_IDX >= cifar10_count) {
-            printf("Error: ALEXNET_INFER_IDX %d out of range [0, %d)\n", ALEXNET_INFER_IDX, cifar10_count);
+            printf_("Error: ALEXNET_INFER_IDX %d out of range [0, %d)\n", ALEXNET_INFER_IDX, cifar10_count);
             return 1;
         }
         infer_bytes = cifar10_data + cifar10_offsets[ALEXNET_INFER_IDX];
-        printf("inference sample: CIFAR-10 idx=%d label=%d\n", ALEXNET_INFER_IDX, cifar10_labels[ALEXNET_INFER_IDX]);
+        printf_("inference sample: CIFAR-10 idx=%d label=%d\n", ALEXNET_INFER_IDX, cifar10_labels[ALEXNET_INFER_IDX]);
     }
     setup_alexnet(&net, 1);
     bind_alexnet_static_memory(&net);
     alexnet_init_weights(&net);
-    printf("alexnet setup fininshed. Waiting for inference...\n");
+    printf_("alexnet setup fininshed. Waiting for inference...\n");
     alexnet_inference(&net, infer_bytes);
     release_alexnet_static_memory(&net);
     #else
-    printf("Error: define ALEXNET_MODE_TRAIN or ALEXNET_MODE_INFERENCE at compile time.\n");
+    printf_("Error: define ALEXNET_MODE_TRAIN or ALEXNET_MODE_INFERENCE at compile time.\n");
     return 1;
     #endif
 

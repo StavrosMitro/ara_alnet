@@ -11,7 +11,13 @@
 #include "alexnet.h"
 #include "data.h"
 #include "image_inference.h"
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 
 
 void alexnet_inference(alexnet *net, const unsigned char *img_bytes)
@@ -22,7 +28,7 @@ void alexnet_inference(alexnet *net, const unsigned char *img_bytes)
     net->input = img.data;    
     forward_alexnet(net);
     int pred = argmax(net->output, OUT_LAYER);
-    printf("prediction: %d\n", pred);
+    printf_("prediction: %d\n", pred);
     free_forward_activations(net);
     free_image(&img);
 }

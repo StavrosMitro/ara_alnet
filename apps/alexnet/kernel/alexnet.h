@@ -7,7 +7,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 #include "convolution_layer.h"
 #include "maxpooling_layer.h"
 #include "activation_layer.h"

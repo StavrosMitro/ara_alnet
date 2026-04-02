@@ -7,7 +7,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#ifdef SPIKE
+#include <printf.h>
+#elif defined ARA_LINUX
+#include <stdio.h>
+#else
 #include "printf.h"
+#endif
 #include "batchnorm_layer.h"
 
 float bn1_avg_buf[BN1_CHANNELS];
@@ -59,7 +65,7 @@ static void bind_bn_layer_buffers(batch_norm_op *op)
             op->x_norm = bn5_x_norm_buf;
             break;
         default:
-            printf("Error: invalid batchnorm layer_id=%d\n", op->layer_id);
+            printf_("Error: invalid batchnorm layer_id=%d\n", op->layer_id);
             exit(1);
     }
 }
@@ -94,7 +100,7 @@ void batch_norm_op_forward(batch_norm_op *op)
 
     bind_bn_layer_buffers(op);
     if (op->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf("Error: BN batchsize %d exceeds static max %d\n", op->batchsize, ALEXNET_STATIC_MAX_BATCH);
+        printf_("Error: BN batchsize %d exceeds static max %d\n", op->batchsize, ALEXNET_STATIC_MAX_BATCH);
         exit(1);
     }
     memset(op->avg, 0, (size_t)op->channels * sizeof(float));

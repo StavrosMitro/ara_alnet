@@ -6,7 +6,7 @@
 // #include <stdlib.h>
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
-#define ALEXNET_STATIC_MAX_BATCH 400
+#define ALEXNET_STATIC_MAX_BATCH 1
 #endif
 
 #define CONV_MAX_IKK  (256 * 3 * 3)
