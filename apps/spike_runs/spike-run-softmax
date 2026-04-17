@@ -1,0 +1,13 @@
+
+=============
+=  SOFTMAX  =
+=============
+
+
+Channels: 3
+Inner Size: 256
+Scalar Softmax...
+The scalar SOFTMAX execution took 0 cycles.
+Vector Softmax...
+The vector Softmax execution took 0 cycles.
+Check okay. No errors.

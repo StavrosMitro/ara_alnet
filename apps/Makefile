@@ -26,6 +26,9 @@ include $(COMMON_DIR)/runtime.mk
 include $(COMMON_DIR)/riscv_tests.mk
 include $(COMMON_DIR)/default_args.mk
 
+# Per-app source finder: skip app-local virtualenv and git metadata.
+find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
+
 APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "main.c"))
 APPS += $(patsubst $(APPS_DIR)/%/main.cpp,%,$(shell find $(APPS_DIR) -name "main.cpp"))
 # Don't automatically compile the benchmark app, which is only a wrapper around the other apps
@@ -51,9 +54,61 @@ bin/fft:  ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
 bin/fft%: ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
 endif
 
+# Optional training step cap for AlexNet smoke runs.
+ALEXNET_MAX_STEPS ?= 0
+# Optional operator timing prints for long Spike runs.
+ALEXNET_SHOW_OP_TIME ?= 0
+
+ifeq ($(ALEXNET_SHOW_OP_TIME),1)
+ALEXNET_TIMING_DEFINE := -DSHOW_OP_TIME
+else
+ALEXNET_TIMING_DEFINE :=
+endif
+
 # AlexNet default profile: training, batchsize=25, static batch=25, epochs=1
-bin/alexnet:  ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=25 -DALEXNET_STATIC_MAX_BATCH=25 -DALEXNET_EPOCHS=1
-bin/alexnet%: ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=25 -DALEXNET_STATIC_MAX_BATCH=25 -DALEXNET_EPOCHS=1
+bin/alexnet:  ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=1 -DALEXNET_STATIC_MAX_BATCH=1 -DALEXNET_EPOCHS=1 -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) $(ALEXNET_TIMING_DEFINE)
+bin/alexnet%: ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=1 -DALEXNET_STATIC_MAX_BATCH=1 -DALEXNET_EPOCHS=1 -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) $(ALEXNET_TIMING_DEFINE)
+
+# fc_layer profile controls (compatible with apps/fc_layer/gccMakefile semantics)
+FC_LAYER_MODE ?= train
+FC_LAYER_LOSS ?= MSE
+FC_LAYER_BATCHSIZE ?= 2
+FC_LAYER_EPOCHS ?= 3
+FC_LAYER_INFER_IDX ?= -1
+FC_LAYER_STATIC_MAX_BATCH ?= $(FC_LAYER_BATCHSIZE)
+
+ifeq ($(FC_LAYER_MODE),train)
+FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_EPOCHS)
+else ifeq ($(FC_LAYER_MODE),inference)
+FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER_INFER_IDX)
+else
+$(error Unsupported FC_LAYER_MODE='$(FC_LAYER_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER_LOSS),MSE)
+FC_LAYER_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER_LOSS),CEL)
+FC_LAYER_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER_LOSS='$(FC_LAYER_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
+
+# fc_layer needs: (1) compile-time train/loss knobs, (2) autovectorization on,
+# (3) assembler include root for data.S .incbin paths.
+bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer:  AUTOVECTORIZE = 1
+bin/fc_layer%: AUTOVECTORIZE = 1
+bin/fc_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+
+# Workaround: keep app-level autovectorization on, but compile training update
+# code without vectorization to avoid Spike runtime corruption in momentum_sgd.
+fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
 all: $(BINARIES)
 
@@ -102,17 +157,17 @@ endef
 $(foreach app,$(APPS),$(eval $(call app_compile_template_ideal,$(app))))
 
 define app_compile_template_spike
-bin/$1.spike: $1/data.S.o.spike $(addsuffix .o.spike, $(shell find $(1) -name "*.c" -o -name "*.cpp" -o -name "*.S")) $(RUNTIME_SPIKE) $(COMMON_SPIKE) patch-spike-crt0
+bin/$1.spike: $1/data.S.o.spike $(addsuffix .o.spike, $(call find_app_sources,$1)) $(RUNTIME_SPIKE) $(COMMON_SPIKE) patch-spike-crt0
 	mkdir -p bin/
-	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS_SPIKE) -o $$@ $$(addsuffix .o.spike, $$(shell find $(1) -name "*.c" -o -name "*.cpp" -o -name "*.S")) $(RUNTIME_SPIKE) $$(RISCV_LDFLAGS_SPIKE) -DSPIKE
+	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS_SPIKE) -o $$@ $$(addsuffix .o.spike, $$(call find_app_sources,$1)) $(RUNTIME_SPIKE) $$(RISCV_LDFLAGS_SPIKE) -DSPIKE
 	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
 endef
 $(foreach app,$(APPS),$(eval $(call app_compile_template_spike,$(app))))
 
 define app_compile_template
-bin/$1$(BIN_SUFFIX): $1/data.S.o $(addsuffix .o, $(shell find -L $(1) -name "*.c" -o -name "*.cpp" -o -name "*.S")) $(RUNTIME_LLVM) linker_script
+bin/$1$(BIN_SUFFIX): $1/data.S.o $(addsuffix .o, $(call find_app_sources,$1)) $(RUNTIME_LLVM) linker_script
 	mkdir -p bin/
-	$$(RISCV_CC) -Iinclude $(RISCV_CCFLAGS) -o $$@ $$(addsuffix .o, $$(shell find -L $(1) -name "*.c" -o -name "*.cpp" -o -name "*.S")) $(RUNTIME_LLVM) $$(RISCV_LDFLAGS)
+	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS) -o $$@ $$(addsuffix .o, $$(call find_app_sources,$1)) $(RUNTIME_LLVM) $$(RISCV_LDFLAGS)
 	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
 	$$(RISCV_STRIP) $$@ -S --strip-unneeded
 endef

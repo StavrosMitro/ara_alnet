@@ -68,7 +68,7 @@ static inline void alexnet_timer_now(alexnet_timer_t *tp)
 #ifdef ALEXNET_BATCHSIZE
 #define ALEXNET_STATIC_MAX_BATCH ALEXNET_BATCHSIZE
 #else
-#define ALEXNET_STATIC_MAX_BATCH 400
+#define ALEXNET_STATIC_MAX_BATCH 1
 #endif
 #endif
 

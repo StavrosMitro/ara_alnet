@@ -57,7 +57,7 @@ void softmax(const float *i, const float *o, const float *buf,
         bufPtr[bufOffset + i] =
             fmax(bufPtr[bufOffset + i], srcPtr[srcOffset + cnDim * cnStep + i]);
       }
-    }
+    } //getting the biggest pixel for each index for all channels.
 
     // Subtract max
     for (size_t outerDim = 0; outerDim < outerSize; outerDim++) {
@@ -69,7 +69,7 @@ void softmax(const float *i, const float *o, const float *buf,
         for (size_t i = 0; i < innerSize; i++)
           dstPtr[offset + i] = srcPtr[offset + i] - bufPtr[bufOffset + i]; // <--- (xi-max) ekthetis
       }
-    }
+    }//exctracting that max in order to avoid overflow of the exponential
 
     // Exponentiate
     for (size_t outerDim = 0; outerDim < outerSize; outerDim++) {

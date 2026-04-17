@@ -38,14 +38,6 @@
 #define C4_CHANNELS 256
 #define C5_CHANNELS 128
 
-// #define IN_CHANNELS 3
-// #define C1_CHANNELS 64
-// #define C2_CHANNELS 192
-// #define C3_CHANNELS 384
-// #define C4_CHANNELS 256
-// #define C5_CHANNELS 256
-
-
 #define C1_KERNEL_L 3    // instead of 11
 #define C2_KERNEL_L 3    // instead of 5
 #define C3_KERNEL_L 3
@@ -74,19 +66,6 @@
 #define FEATURE4_L 8
 #define FEATURE5_L 8
 #define POOLING5_L 4
-
-// #define FEATURE0_L 224
-// #define FEATURE1_L 55
-// #define POOLING1_L 27
-// #define FEATURE2_L 27
-// #define POOLING2_L 13
-// #define FEATURE3_L 13
-// #define FEATURE4_L 13
-// #define FEATURE5_L 13
-// #define POOLING5_L 6
-
-// #define FC6_LAYER   4096
-// #define FC7_LAYER   4096
 
 #define FC6_LAYER   512
 #define FC7_LAYER   512

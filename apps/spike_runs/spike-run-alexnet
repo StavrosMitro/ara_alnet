@@ -1,0 +1,25 @@
+batch size: 1 
+epochs: 1 
+net: 0000000084ED1078
+batchsize in setup
+setup finished
+allocation of net struct
+Network pointers use weights.c arrays directly (no parameter buffer copy).
+Trainable layers:
+  conv1: 0
+  conv2: 0
+  conv3: 0
+  conv4: 0
+  conv5: 1
+  bn1: 0
+  bn2: 0
+  bn3: 0
+  bn4: 0
+  bn5: 0
+  fc1: 0
+  fc2: 0
+  fc3: 1
+Total trainable layers: 2/13
+pred[ 0 ]  label[ 7 ]
+batch accuracy:  0.0000  (0 / 1 correct)
+batch macro F1:  0.0000  (over 2 classes)

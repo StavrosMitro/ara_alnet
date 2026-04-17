@@ -22,56 +22,6 @@
 #define MATRIX_TRANSPOSE_WORKSPACE_ELEMS 2000000
 static float matrix_transpose_workspace[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 
-/*
-// 
-// SIMD
-//
-void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K)
-{
-    register int i,j;
-    register int a_offset=0;
-    for(i=0; i<M; i++)
-    {
-        for(j=0; j<N; j++,a_offset++)
-        {
-            register float apart = a[a_offset];
-            if(apart<0.00001 && apart>(0-0.00001))
-                continue;
-            register int c_offset = i*K;
-            register int b_offset = j*K;
-            __m128 zero={};
-            while(c_offset%4!=0)
-            {
-                c_offset--;
-            } 
-            while(b_offset%4!=0)
-            {
-                b_offset--;
-            } 
-            while(c_offset<(i+1)*K-4)
-            {
-                __m128  ma=zero+apart;  
-                __m128  mb;  
-                __m128  mc;  
-                mb = _mm_load_ps(b+b_offset);  
-                mc = _mm_load_ps(c+c_offset);           
-                mc = _mm_add_ps(mc, _mm_mul_ps(ma, mb));
-                _mm_store_ps(c+c_offset, mc); 
-                c_offset+=4;
-                b_offset+=4;
-            }
-            while(c_offset<(i+1)*K)
-            {
-                c[c_offset++] += apart * b[b_offset++];
-            }
-        }
-    }
-}
-*/
-
-//
-// Todo: Explore more efficient matrix_multiply algorithm
-//
 void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K)
 {
     /**

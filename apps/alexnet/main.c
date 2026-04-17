@@ -213,26 +213,12 @@ void metrics(float *ret, int *preds, int *labels,
 
 int argmax(float *arr, int n)
 {
-    /**
-     * Return the index of max-value among arr ~ arr+n
-     * 
-     * Input:
-     *      arr
-     * Output:
-     * Return:
-     *      the index of max-value
-     * */ 
+    if (n <= 0) return -1;
     
+    int idx = 0;
+    float max = arr[0];
     
-     /*        for (int i = 0; i < net->batchsize; i++)
-                    preds[i] = argmax(net->output + i * net->fc3.out_units, net->fc3.out_units);
-    */
-
-    //
-    
-    int   idx = -1;
-    float max = -1111111111;
-    for (int p = 0; p<n; p++)
+    for (int p = 1; p < n; p++) 
     {
         if (arr[p] > max)
         {
@@ -240,10 +226,8 @@ int argmax(float *arr, int n)
             max = arr[p];
         }
     }
-    // assert(idx!=-1);
     return idx;
 }
-
 
 void forward_alexnet(alexnet *net)
 {
