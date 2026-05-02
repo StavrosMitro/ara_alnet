@@ -67,23 +67,6 @@ static float fc_t_output_scratch[ALEXNET_STATIC_MAX_BATCH * FC_MAX_INTERNAL * 2]
 
 void fc_op_forward(fc_op *op)
 {
-    if (op->out_units > FC_MAX_INTERNAL) {
-        printf_("Error: FC 'out_units' bound exceeded. Actual: %d, Max allowed: %d\n", 
-            op->out_units, FC_MAX_INTERNAL);
-        exit(1);
-    }
-
-    if (op->in_units > FC_MAX_IN_UNITS) {
-        printf_("Error: FC 'in_units' bound exceeded. Actual: %d, Max allowed: %d\n", 
-            op->in_units, FC_MAX_IN_UNITS);
-        exit(1);
-    }
-
-    if (op->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-        printf_("Error: FC 'batchsize' bound exceeded. Actual: %d, Max allowed: %d\n", 
-            op->batchsize, ALEXNET_STATIC_MAX_BATCH);
-        exit(1);
-    }
 
     float *t_output = fc_t_output_scratch;
     memset(t_output, 0, (size_t)op->out_units * op->batchsize * sizeof(float));
@@ -101,82 +84,6 @@ void fc_op_forward(fc_op *op)
     }
 }
 
-
-// void fc_op_forward(fc_op *op)
-// {
-//     short tnum = 8; // number of partitions
-//     if (op->out_units < tnum)
-//     {
-//         fc_args args;
-//         args.op = op;
-//         args.st_tunits = 0;
-//         args.ed_tunits = op->out_units;
-//         fc_op_forward_range((void *)(&args));
-//     }else {
-//         fc_args args[tnum+1];
-//         short internal = ceil(1.0 * op->out_units / tnum);
-    
-//         for (int p = 0; p < tnum; p++)
-//         {
-//             args[p].op = op;
-//             args[p].st_tunits = p*internal;
-//             args[p].ed_tunits = MIN(args[p].st_tunits+internal, op->out_units);
-//             if (args[p].st_tunits >= op->out_units) break;
-//             fc_op_forward_range((void *)(&args[p]));
-//         }
-//     }
-
-// }
-
-
-void fc_op_backward_full(fc_op *op)
-{
-    if (op->d_weights == NULL || op->d_bias == NULL) {
-        fc_op_backward_input_only(op);
-        return;
-    }
-
-    // calculate delta_input per sample
-    // weights layout: W[in_units, out_units], W[i][j] = weights[i * out_units + j]
-    for (int p = 0; p < op->batchsize; p++)
-    {
-        for (register int j = 0; j < op->out_units; j++)
-        {
-            register float d_o = op->d_output[p * op->out_units + j];
-            for (register int i = 0; i < op->in_units; i++)
-            {
-                op->d_input[p * op->in_units + i] += op->weights[i * op->out_units + j] * d_o;
-            }
-        }
-    }
-    // calculate delta_bias averaged across batch
-    for (register int j = 0; j < op->out_units; j++)
-    {
-        register float sum = 0.0f;
-        for (int p = 0; p < op->batchsize; p++)
-            sum += op->d_output[p * op->out_units + j];
-        op->d_bias[j] = sum / op->batchsize;
-    }
-
-    // calculate delta_weights
-    register float *w_deltas = op->d_weights;
-    for (int i = 0; i < op->out_units; i++)
-    {
-        register float *input = op->input;
-        // d_weights layout must match weights: W[k][i] = d_weights[k * out_units + i]
-        for (int p = 0; p < op->batchsize; p++)
-        {
-            register float oe = op->d_output[p * op->out_units + i];
-            if (fabsf(oe) < 1e-9f)
-                continue;
-
-            for (int k = 0; k < op->in_units; k++)
-            {
-                w_deltas[k * op->out_units + i] += oe * input[p * op->in_units + k] / op->batchsize;
-            }
-        }
-    }
-}
 
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
