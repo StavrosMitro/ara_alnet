@@ -428,13 +428,12 @@ int main(void)
     static alexnet net;
     
     #if defined(ALEXNET_MODE_TRAIN)
+    printf_("test to see if it compiled 14:36!\n");
     printf_("batch size: %d \n", ALEXNET_BATCHSIZE);
     printf_("epochs: %d \n", ALEXNET_EPOCHS);
-    printf_("net: %p\n", &net);
+
     setup_alexnet(&net, ALEXNET_BATCHSIZE);
-    printf_("setup finished\n");
     malloc_alexnet(&net);
-    printf_("allocation of net struct\n");
     alexnet_init_weights(&net);
 
     net.trainable.fc1 = 1;

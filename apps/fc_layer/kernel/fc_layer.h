@@ -12,7 +12,7 @@
 #endif
 
 #define FC_MAX_IN_UNITS 2048
-#define FC_MAX_INTERNAL 64
+#define FC_MAX_INTERNAL 512
 
 typedef struct fc_op {
     float *input;   float *d_input;
@@ -32,7 +32,6 @@ typedef struct fc_backward_cycle_breakdown {
 
 
 void fc_op_forward(fc_op *op);
-void fc_op_backward(fc_op *op);
 void fc_op_backward_full(fc_op *op);
 void fc_op_backward_input_only(fc_op *op);
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles);
