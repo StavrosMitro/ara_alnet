@@ -17,6 +17,37 @@
 #include "fc_layer.h"
 #include "matrix.h"
 #include "runtime.h"
+#include "fmatmul.h"
+
+#if ALEXNET_STATIC_MAX_BATCH > 4
+#define FMATMUL_MAX_M ALEXNET_STATIC_MAX_BATCH
+#else
+#define FMATMUL_MAX_M 4
+#endif
+
+#define FMATMUL_MAX_N FC_MAX_IN_UNITS
+#define FMATMUL_MAX_K FC_MAX_INTERNAL
+
+static float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
+static float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
+
+static inline unsigned long int fmatmul_row_block(unsigned long int m)
+{
+    if (m <= 4)
+        return 4;
+    if (m <= 8)
+        return 8;
+    if (m <= 64)
+        return 16;
+    if (m <= 128)
+        return 8;
+    return 4;
+}
+
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
+                                         const float *bias, float *c,
+                                         const int M, const int N,
+                                         const int K);
 
 static inline int64_t fc_cycle_count_local(void)
 {
@@ -27,63 +58,77 @@ static inline int64_t fc_cycle_count_local(void)
 
 static float fc_t_output_scratch[ALEXNET_STATIC_MAX_BATCH * FC_MAX_INTERNAL * 2];
 
-// static void fc_op_forward_range(void *argv)
-// {
-//     /**
-//      * pthread fc_op_forward
-//      * */
-//     fc_args args;
-//     memcpy(&args, (fc_args *)argv, sizeof(fc_args));
-//     short internal   = args.ed_tunits - args.st_tunits;
-//     if (internal > FC_MAX_INTERNAL || args.op->in_units > FC_MAX_IN_UNITS || args.op->batchsize > ALEXNET_STATIC_MAX_BATCH) {
-//         printf_("Error: FC scratch bounds exceeded (internal=%d, in_units=%d, batch=%d)\n",
-//                (int)internal, args.op->in_units, args.op->batchsize);
-//         exit(1);
-//     }
-//     float *t_weights = fc_t_weights_scratch;
-    
-//     for (int j = 0; j < args.op->in_units; j++)
-//     {   
-//         memcpy((void *)(t_weights+j*internal), 
-//                 (void *)(args.op->weights+j*(args.op->out_units)+args.st_tunits), 
-//                     sizeof(float)*internal);
-//     }
-
-//     float *t_output = fc_t_output_scratch;
-//     memset(t_output, 0, (size_t)internal * args.op->batchsize * sizeof(float));
-//     matrix_multiply(args.op->input, t_weights, t_output,  args.op->batchsize,  args.op->in_units, internal);
-
-//     for (int j = 0; j < args.op->batchsize; j++)
-//     {
-//         register int o_offset  = j * internal;
-//         register int oo_offset = j * (args.op->out_units) + args.st_tunits;
-
-//         for (int i = 0; i < internal; i++, o_offset++, oo_offset++)
-//             args.op->output[oo_offset] = t_output[o_offset] + args.op->bias[args.st_tunits+i]; 
-//     }
-//     return;
-// }
-
 
 void fc_op_forward(fc_op *op)
 {
+    if (op->batchsize <= 0 || op->in_units <= 0 || op->out_units <= 0)
+        return;
 
-    float *t_output = fc_t_output_scratch;
-    memset(t_output, 0, (size_t)op->out_units * op->batchsize * sizeof(float));
+    unsigned long int block = fmatmul_row_block((unsigned long int)op->batchsize);
+    unsigned long int padded_m = (((unsigned long int)op->batchsize + block - 1) / block) * block;
 
-    matrix_multiply(op->input, op->weights, t_output,  
-                    op->batchsize, op->in_units, op->out_units);
-
-    for (int j = 0; j < op->batchsize; j++)
+    if ((unsigned long int)op->in_units > FMATMUL_MAX_N ||
+        (unsigned long int)op->out_units > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
     {
-        register int offset = j * op->out_units;
+        matrix_multiply_scalar_fused(op->input, op->weights, op->bias, op->output,
+                                     op->batchsize, op->in_units, op->out_units);
+        return;
+    }
 
-        for (int i = 0; i < op->out_units; i++) {
-            op->output[offset + i] = t_output[offset + i] + op->bias[i]; 
-        }
+    const size_t mn = (size_t)op->batchsize * (size_t)op->in_units;
+    const size_t pnk = (size_t)padded_m * (size_t)op->in_units;
+    const size_t mk = (size_t)op->batchsize * (size_t)op->out_units;
+
+    size_t remaining_mn = mn;
+    const float *src_mn = op->input;
+    float *dst_mn = fmatmul_a_scratch;
+    while (remaining_mn > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl;
+        dst_mn += vl;
+        remaining_mn -= vl;
+    }
+
+    size_t remaining = pnk - mn;
+    float *dst = fmatmul_a_scratch + mn;
+    while (remaining > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.x v0, zero");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        dst += vl;
+        remaining -= vl;
+    }
+
+    fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, op->weights, op->bias,
+                 padded_m, (unsigned long int)op->in_units,
+                 (unsigned long int)op->out_units);
+
+    size_t remaining_mk = mk;
+    const float *src_mk = fmatmul_c_scratch;
+    float *dst_mk = op->output;
+    while (remaining_mk > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl;
+        dst_mk += vl;
+        remaining_mk -= vl;
     }
 }
 
+void fc_op_forward_fused(fc_op *op)
+{
+    fc_op_forward(op);
+}
 
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
@@ -122,6 +167,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
             sum += op->d_output[p * op->out_units + j];
         op->d_bias[j] = sum / op->batchsize;
     }
+    
     int64_t elapsed = fc_cycle_count_local() - t0;
     if (cycles)
         cycles->d_input_bias_cycles += elapsed;
@@ -202,3 +248,36 @@ void load_fc_weights(fc_op *op, float *w_array, float *b_array)
     memcpy(op->weights, w_array, sizeof(float) * op->in_units * op->out_units);
     memcpy(op->bias, b_array, sizeof(float) * op->out_units);
 }
+
+
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
+                                         const float *bias, float *c,
+                                         const int M, const int N, const int K)
+{
+    register int i, j, p;
+    register const float *a_ptr = a;
+    for (i = 0; i < M; i++)
+    {
+        float *c_ptr = c + i * K;
+        const float *bias_ptr = bias;
+        for (p = 0; p < K; p++)
+            *(c_ptr++) = *(bias_ptr++);
+    }
+    for (i = 0; i < M; i++)
+    {
+        register const float *b_ptr = b;
+        for (j = 0; j < N; j++)
+        {
+            register float apart = *(a_ptr++);
+            if (apart < 0.00001f && apart > -0.00001f)
+            {
+                b_ptr += K;
+                continue;
+            }
+            register float *c_ptr = c + i * K;
+            for (p = 0; p < K; p++)
+                *(c_ptr++) += *(b_ptr++) * apart;
+        }
+    }
+}
+

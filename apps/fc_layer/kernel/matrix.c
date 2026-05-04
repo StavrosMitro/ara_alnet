@@ -36,6 +36,11 @@ static float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
 static float fmatmul_b_scratch[FMATMUL_MAX_N * FMATMUL_MAX_K];
 static float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
+                                         const float *bias, float *c,
+                                         const int M, const int N,
+                                         const int K);
+
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
 {
     if (m <= 4)
@@ -49,28 +54,6 @@ static inline unsigned long int fmatmul_row_block(unsigned long int m)
     return 4;
 }
 
-static void matrix_multiply_scalar(const float *a, const float *b, float *c,
-                                   const int M, const int N, const int K)
-{
-    register int i, j, p;
-    register const float *a_ptr = a;
-    for (i = 0; i < M; i++)
-    {
-        register const float *b_ptr = b;
-        for (j = 0; j < N; j++)
-        {
-            register float apart = *(a_ptr++);
-            if (apart < 0.00001f && apart > -0.00001f)
-            {
-                b_ptr += K;
-                continue;
-            }
-            register float *c_ptr = c + i * K;
-            for (p = 0; p < K; p++)
-                *(c_ptr++) += *(b_ptr++) * apart;
-        }
-    }
-}
 
 void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K)
 {
@@ -102,7 +85,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
-    for (size_t idx = 0; idx < mn; idx++) //stripmining
+    for (size_t idx = 0; idx < mn; idx++)
         fmatmul_a_scratch[idx] = a[idx];
     for (size_t idx = mn; idx < pnk; idx++)
         fmatmul_a_scratch[idx] = 0.0f;
@@ -112,6 +95,59 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
 
     for (size_t idx = 0; idx < mk; idx++)
         c[idx] += fmatmul_c_scratch[idx];
+}
+
+void matrix_multiply_fused(const float *a, const float *b, const float *bias,
+                           float *c, const int M, const int N, const int K)
+{
+    /**
+     * matrix multiply with fused bias, c = a * b + bias
+     *
+     * Input:
+     * a    [M,N]
+     * b    [N,K]
+     * bias [K]
+     * Output:
+     * c    [M,K]
+     * */
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    unsigned long int block = fmatmul_row_block((unsigned long int)M);
+    unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
+
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        matrix_multiply_scalar_fused(a, b, bias, c, M, N, K);
+        return;
+    }
+
+    const size_t mn = (size_t)M * (size_t)N;
+    const size_t pnk = (size_t)padded_m * (size_t)N;
+    const size_t mk = (size_t)M * (size_t)K;
+
+    for (size_t idx = 0; idx < mn; idx++)
+        fmatmul_a_scratch[idx] = a[idx];
+
+    size_t remaining = pnk - mn;
+    float *dst = fmatmul_a_scratch + mn;
+    while (remaining > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.x v0, zero");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        dst += vl;
+        remaining -= vl;
+    }
+
+    fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, b, bias,
+                 padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    for (size_t idx = 0; idx < mk; idx++)
+        c[idx] = fmatmul_c_scratch[idx];
 }
 
 void matrix_transpose(float *x, int m, int n)
@@ -138,4 +174,60 @@ void matrix_transpose(float *x, int m, int n)
     }
     memcpy(x, tmp, elems * sizeof(float));
     return;
+}
+
+
+
+static void matrix_multiply_scalar(const float *a, const float *b, float *c,
+                                   const int M, const int N, const int K)
+{
+    register int i, j, p;
+    register const float *a_ptr = a;
+    for (i = 0; i < M; i++)
+    {
+        register const float *b_ptr = b;
+        for (j = 0; j < N; j++)
+        {
+            register float apart = *(a_ptr++);
+            if (apart < 0.00001f && apart > -0.00001f)
+            {
+                b_ptr += K;
+                continue;
+            }
+            register float *c_ptr = c + i * K;
+            for (p = 0; p < K; p++)
+                *(c_ptr++) += *(b_ptr++) * apart;
+        }
+    }
+}
+
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
+                                         const float *bias, float *c,
+                                         const int M, const int N, const int K)
+{
+    register int i, j, p;
+    register const float *a_ptr = a;
+    for (i = 0; i < M; i++)
+    {
+        float *c_ptr = c + i * K;
+        const float *bias_ptr = bias;
+        for (p = 0; p < K; p++)
+            *(c_ptr++) = *(bias_ptr++);
+    }
+    for (i = 0; i < M; i++)
+    {
+        register const float *b_ptr = b;
+        for (j = 0; j < N; j++)
+        {
+            register float apart = *(a_ptr++);
+            if (apart < 0.00001f && apart > -0.00001f)
+            {
+                b_ptr += K;
+                continue;
+            }
+            register float *c_ptr = c + i * K;
+            for (p = 0; p < K; p++)
+                *(c_ptr++) += *(b_ptr++) * apart;
+        }
+    }
 }

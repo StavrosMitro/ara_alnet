@@ -32,6 +32,7 @@ typedef struct fc_backward_cycle_breakdown {
 
 
 void fc_op_forward(fc_op *op);
+void fc_op_forward_fused(fc_op *op);
 void fc_op_backward_full(fc_op *op);
 void fc_op_backward_input_only(fc_op *op);
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles);

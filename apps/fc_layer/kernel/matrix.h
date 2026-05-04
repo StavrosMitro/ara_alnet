@@ -6,4 +6,6 @@
 // #include <stdlib.h>
 
 void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K);
+void matrix_multiply_fused(const float *a, const float *b, const float *bias,
+						   float *c, const int M, const int N, const int K);
 void matrix_transpose(float *x, int m, int n);

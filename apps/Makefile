@@ -95,12 +95,12 @@ endif
 
 FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
 
-# fc_layer needs: (1) compile-time train/loss knobs, (2) autovectorization on,
+# fc_layer needs: (1) compile-time train/loss knobs, (2) autovectorization off,
 # (3) assembler include root for data.S .incbin paths.
 bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
 bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
-bin/fc_layer:  AUTOVECTORIZE = 1
-bin/fc_layer%: AUTOVECTORIZE = 1
+bin/fc_layer:  AUTOVECTORIZE = 0
+bin/fc_layer%: AUTOVECTORIZE = 0
 bin/fc_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
 bin/fc_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
 bin/fc_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
