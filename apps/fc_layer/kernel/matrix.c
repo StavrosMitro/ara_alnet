@@ -36,6 +36,8 @@ static float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
 static float fmatmul_b_scratch[FMATMUL_MAX_N * FMATMUL_MAX_K];
 static float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
+static void matrix_multiply_scalar(const float *a, const float *b, float *c,
+                                   const int M, const int N, const int K);
 static void matrix_multiply_scalar_fused(const float *a, const float *b,
                                          const float *bias, float *c,
                                          const int M, const int N,
@@ -81,7 +83,6 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     }
 
     const size_t mn = (size_t)M * (size_t)N;
-    const size_t nk = (size_t)N * (size_t)K;
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
@@ -178,8 +179,7 @@ void matrix_transpose(float *x, int m, int n)
 
 
 
-static void matrix_multiply_scalar(const float *a, const float *b, float *c,
-                                   const int M, const int N, const int K)
+static void matrix_multiply_scalar(const float *a, const float *b, float *c, const int M, const int N, const int K)
 {
     register int i, j, p;
     register const float *a_ptr = a;
