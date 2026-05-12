@@ -2,7 +2,7 @@
 // File:        fc_layer.c
 // Description: Implementation of full connected layer
 // Author:      Haris Wang
-// Modified: Stavros Mitropoulos
+// Modified and got vectorized: Stavros Mitropoulos
 //
 #include <stdlib.h>
 #include <math.h>
@@ -28,8 +28,6 @@
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
 #define FMATMUL_MAX_K FC_MAX_INTERNAL
 
-static float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
-static float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
 {
@@ -61,6 +59,8 @@ static float fc_t_output_scratch[ALEXNET_STATIC_MAX_BATCH * FC_MAX_INTERNAL * 2]
 
 void fc_op_forward(fc_op *op)
 {
+    float *fmatmul_a_scratch = shared_memory_pool;
+
     if (op->batchsize <= 0 || op->in_units <= 0 || op->out_units <= 0)
         return;
 
@@ -125,10 +125,6 @@ void fc_op_forward(fc_op *op)
     }
 }
 
-void fc_op_forward_fused(fc_op *op)
-{
-    fc_op_forward(op);
-}
 
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
@@ -145,19 +141,16 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     }
 
     t0 = fc_cycle_count_local();
-    // calculate delta_input per sample
-    for (int p = 0; p < op->batchsize; p++)
-    {
-        for (register int j = 0; j < op->out_units; j++)
-        {
-            register float d_o = op->d_output[p * op->out_units + j];
-            for (register int i = 0; i < op->in_units; i++)
-            {
-                op->d_input[p * op->in_units + i] +=
-                    op->weights[i * op->out_units + j] * d_o;
-            }
-        }
-    }
+
+    // calculate delta_input per sample using A * B^T
+#ifdef FMATMUL_NT_VERIFY
+    matrix_multiply_nt_verify(op->d_output, op->weights,
+                              op->batchsize, op->out_units,
+                              op->in_units, 1e-4f);
+#endif
+    //d_input calculation
+    matrix_multiply_nt(op->d_output, op->weights, op->d_input,
+                       op->batchsize, op->out_units, op->in_units);
 
     // calculate delta_bias averaged across batch
     for (register int j = 0; j < op->out_units; j++)

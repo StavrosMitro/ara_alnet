@@ -2,6 +2,7 @@
 // File:        data.c
 // Description: Provide functions for data process 
 // Author:      Haris Wang
+// Modified and corrected: Stavros Mitropoulos
 //
 // #include <stdlib.h>
 #include <stdio.h>

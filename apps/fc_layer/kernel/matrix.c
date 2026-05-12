@@ -5,6 +5,7 @@
 // Modified: Stavros Mitropoulos
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "alexnet.h"
 #include "fmatmul.h"
 // #include <immintrin.h> 
@@ -16,12 +17,9 @@
 #include "printf.h"
 #endif
 
-// I REMOVED IT, BECAUSE IT IS FOR X86 ASSEMBLY
+#define MATRIX_TRANSPOSE_WORKSPACE_ELEMS (FC_MAX_IN_UNITS * FC_MAX_INTERNAL)
 
-// Workspace used by matrix_transpose to avoid large stack allocations.
-// Sized conservatively for current AlexNet transpose use cases.
-#define MATRIX_TRANSPOSE_WORKSPACE_ELEMS 2000000
-static float matrix_transpose_workspace[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
+float shared_memory_pool[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 
 #if ALEXNET_STATIC_MAX_BATCH > 4
 #define FMATMUL_MAX_M ALEXNET_STATIC_MAX_BATCH
@@ -32,12 +30,15 @@ static float matrix_transpose_workspace[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
 #define FMATMUL_MAX_K FC_MAX_INTERNAL
 
-static float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
-static float fmatmul_b_scratch[FMATMUL_MAX_N * FMATMUL_MAX_K];
-static float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
+// float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
+float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
+static float fmatmul_nt_loop_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
+static float fmatmul_nt_out_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
 static void matrix_multiply_scalar(const float *a, const float *b, float *c,
                                    const int M, const int N, const int K);
+static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
+                                      const int M, const int N, const int K);
 static void matrix_multiply_scalar_fused(const float *a, const float *b,
                                          const float *bias, float *c,
                                          const int M, const int N,
@@ -70,7 +71,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
      * */
     if (M <= 0 || N <= 0 || K <= 0)
         return;
-
+    float *fmatmul_a_scratch = shared_memory_pool;
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
@@ -114,6 +115,7 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     if (M <= 0 || N <= 0 || K <= 0)
         return;
 
+    float *fmatmul_a_scratch = shared_memory_pool;
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
@@ -151,6 +153,91 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
         c[idx] = fmatmul_c_scratch[idx];
 }
 
+void matrix_multiply_nt(const float *a, const float *b, float *c,
+                        const int M, const int N, const int K)
+{
+    /**
+     * matrix multiply, c += a * b^T
+     *
+     * Input:
+     * a    [M,N]
+     * b    [K,N]
+     * Output:
+     * c    [M,K]
+     * */
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    float *fmatmul_a_scratch = shared_memory_pool;
+    unsigned long int block = fmatmul_row_block((unsigned long int)M);
+    unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
+
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        matrix_multiply_scalar_nt(a, b, c, M, N, K);
+        return;
+    }
+
+    const size_t mn = (size_t)M * (size_t)N;
+    const size_t pnk = (size_t)padded_m * (size_t)N;
+    const size_t mk = (size_t)M * (size_t)K;
+
+    for (size_t idx = 0; idx < mn; idx++)
+        fmatmul_a_scratch[idx] = a[idx];
+    for (size_t idx = mn; idx < pnk; idx++)
+        fmatmul_a_scratch[idx] = 0.0f;
+
+    fmatmul_nt(fmatmul_c_scratch, fmatmul_a_scratch, b,
+               padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    for (size_t idx = 0; idx < mk; idx++)
+        c[idx] += fmatmul_c_scratch[idx];
+}
+
+int matrix_multiply_nt_verify(const float *a, const float *b,
+                              const int M, const int N, const int K,
+                              const float eps)
+{
+    if (M <= 0 || N <= 0 || K <= 0)
+        return 0;
+
+    if ((unsigned long int)M > FMATMUL_MAX_M ||
+        (unsigned long int)K > FMATMUL_MAX_K)
+    {
+        printf_("matrix_multiply_nt_verify: dims too large (%d x %d)\n", M, K);
+        return 0;
+    }
+
+    const size_t mk = (size_t)M * (size_t)K;
+    for (size_t idx = 0; idx < mk; idx++) {
+        fmatmul_nt_loop_scratch[idx] = 0.0f;
+        fmatmul_nt_out_scratch[idx] = 0.0f;
+    }
+
+    matrix_multiply_scalar_nt(a, b, fmatmul_nt_loop_scratch, M, N, K);
+    matrix_multiply_nt(a, b, fmatmul_nt_out_scratch, M, N, K);
+
+    size_t mismatch_count = 0;
+    float max_diff = 0.0f;
+    for (size_t idx = 0; idx < mk; idx++) {
+        float diff = fabsf(fmatmul_nt_loop_scratch[idx] - fmatmul_nt_out_scratch[idx]);
+        if (diff > max_diff)
+            max_diff = diff;
+        if (diff > eps)
+            mismatch_count++;
+    }
+
+    if (mismatch_count == 0)
+        printf_("matrix_multiply_nt_verify: OK (max diff %f)\n", max_diff);
+    else
+        printf_("matrix_multiply_nt_verify: FAIL (mismatches %lu, max diff %f)\n",
+                (unsigned long)mismatch_count, max_diff);
+
+    return (mismatch_count == 0) ? 1 : 0;
+}
+
 void matrix_transpose(float *x, int m, int n)
 {
     /** matrix transpose
@@ -165,7 +252,7 @@ void matrix_transpose(float *x, int m, int n)
         printf_("Error: matrix_transpose workspace too small for %d x %d\n", m, n);
         exit(1);
     }
-    float *tmp = matrix_transpose_workspace;
+    float *tmp = shared_memory_pool;
     register int i, j;
     register float *ptr = x;
     for (i = 0; i < m; i++)
@@ -197,6 +284,23 @@ static void matrix_multiply_scalar(const float *a, const float *b, float *c, con
             register float *c_ptr = c + i * K;
             for (p = 0; p < K; p++)
                 *(c_ptr++) += *(b_ptr++) * apart;
+        }
+    }
+}
+
+static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
+                                      const int M, const int N, const int K)
+{
+    for (int i = 0; i < M; i++)
+    {
+        const float *a_ptr = a + (size_t)i * (size_t)N;
+        for (int k = 0; k < K; k++)
+        {
+            const float *b_ptr = b + (size_t)k * (size_t)N;
+            float sum = 0.0f;
+            for (int j = 0; j < N; j++)
+                sum += a_ptr[j] * b_ptr[j];
+            c[(size_t)i * (size_t)K + (size_t)k] += sum;
         }
     }
 }
