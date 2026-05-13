@@ -256,12 +256,75 @@ static void momentum_sgd(float *w, float *v_w, float *d_w, int units)
     }
 }
 
+static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
+{
+    float lr = LEARNING_RATE;
+    int n = units;
+
+#if ALEXNET_USE_MOMENTUM
+    float momentum = 0.9f;
+    float clip_min = -1.0f;
+    float clip_max = 1.0f;
+
+    while (n > 0) {
+        size_t vl;
+        
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+
+        // v8: Velocity (v_w), v16: Gradients (d_w), v24: Weights (w)
+        asm volatile("vle32.v v8,  (%0)" :: "r"(v_w));
+        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
+        asm volatile("vle32.v v24, (%0)" :: "r"(w));
+
+        // 2. v_w = v_w * 0.9f
+        asm volatile("vfmul.vf v8, v8, %0" :: "f"(momentum));
+
+        // 3. v_w = v_w - LR * d_w
+        // vfnmsac = Vector Floating-point Negative Multiply-Subtract Accumulate
+        // vd = -(rs1 * vs2) + vd
+        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
+
+        // 4. CLIP(v_w, -1.0f, 1.0f)
+        asm volatile("vfmax.vf v8, v8, %0" :: "f"(clip_min));
+        asm volatile("vfmin.vf v8, v8, %0" :: "f"(clip_max));
+
+        asm volatile("vfadd.vv v24, v24, v8");
+
+        asm volatile("vse32.v v8,  (%0)" :: "r"(v_w));
+        asm volatile("vse32.v v24, (%0)" :: "r"(w));
+
+        w += vl;
+        v_w += vl;
+        d_w += vl;
+        n -= vl;
+    }
+#else
+    (void)v_w;
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+
+        asm volatile("vle32.v v8,  (%0)" :: "r"(w));
+        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
+
+        // w = w - LR * d_w (Με χρήση της εντολής Negative MAC)
+        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
+
+        asm volatile("vse32.v v8,  (%0)" :: "r"(w));
+
+        w += vl;
+        d_w += vl;
+        n -= vl;
+    }
+#endif
+}
+
 
 static void gradient_descent_a(void *argv)
 {
     alexnet *net = (alexnet *)argv;
     if (net->trainable.fc1)
-        momentum_sgd(fc1_weights, v_fc1_weights, d_fc1_weights,
+        momentum_sgd_vec(fc1_weights, v_fc1_weights, d_fc1_weights,
                      FC_INPUT_UNITS * FC_OUTPUT_UNITS);
 }
 
@@ -269,7 +332,7 @@ static void gradient_descent_d(void *argv)
 {
     alexnet *net = (alexnet *)argv;
     if (net->trainable.fc1)
-        momentum_sgd(fc1_bias, v_fc1_bias, d_fc1_bias,
+        momentum_sgd_vec(fc1_bias, v_fc1_bias, d_fc1_bias,
                      FC_OUTPUT_UNITS);
 }
 

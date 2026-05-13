@@ -143,11 +143,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 
     // calculate delta_input per sample using A * B^T
     t0 = fc_cycle_count_local();
-// #ifdef FMATMUL_NT_VERIFY
-    // matrix_multiply_nt_verify(op->d_output, op->weights,
-    //                           op->batchsize, op->out_units,
-    //                           op->in_units, 1e-4f);
-// #endif
+
     // d_input calculation
     matrix_multiply_nt(op->d_output, op->weights, op->d_input,
                        op->batchsize, op->out_units, op->in_units); 
@@ -160,29 +156,6 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 
     // calculate delta_bias averaged across batch
     t0 = fc_cycle_count_local();
-    
-    // for (register int j = 0; j < op->out_units; j++)
-    // {
-    //     register float sum = 0.0f;
-    //     for (int p = 0; p < op->batchsize; p++)
-    //         sum += op->d_output[p * op->out_units + j];
-    //     op->d_bias[j] = sum / op->batchsize;
-    // }
-
-    // Initialize bias accumulator to zero
-    // for (int j = 0; j < op->out_units; j++)
-    //     op->d_bias[j] = 0.0f;
-
-    // // Accumulate over batch, row by row
-    // for (int p = 0; p < op->batchsize; p++) {
-    //     float* row = &(op->d_output[p * op->out_units]);
-    //     for (int j = 0; j < op->out_units; j++) {
-    //         op->d_bias[j] += row[j];
-    //     }
-    // }
-    // // Divide by batchsize
-    // for (int j = 0; j < op->out_units; j++)
-    //     op->d_bias[j] /= op->batchsize;
 
     calc_bias_gradient_vec_batch2(op->d_bias, op->d_output, op->out_units);
 
@@ -193,25 +166,30 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     t0 = fc_cycle_count_local();
     // calculate delta_weights
     register float *w_deltas = op->d_weights;
-    for (int i = 0; i < op->out_units; i++)
-    {
-        register float *input = op->input;
-        for (int p = 0; p < op->batchsize; p++)
-        {
-            register float oe = op->d_output[p * op->out_units + i];
-            if (fabsf(oe) < 1e-9f)
-                continue;
 
-            for (int k = 0; k < op->in_units; k++)
-            {
-                w_deltas[k * op->out_units + i] +=
-                    oe * input[p * op->in_units + k] / op->batchsize;
-            }
-        }
-    }
+    matrix_multiply_tn(op->input, op->d_output, w_deltas,
+                    op->batchsize, op->in_units, op->out_units);
+
+
     elapsed = fc_cycle_count_local() - t0;
     if (cycles)
         cycles->d_weights_cycles += elapsed;
+}
+
+static inline void vector_scale_f32(float *vec, float scale, int length) {
+    int n = length;
+    while (n > 0) {
+        size_t vl;
+
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+        
+        asm volatile("vle32.v v8, (%0)" :: "r"(vec));        // Φόρτωση
+        asm volatile("vfmul.vf v8, v8, %0" :: "f"(scale));   // Πολλαπλασιασμός
+        asm volatile("vse32.v v8, (%0)" :: "r"(vec));        // Εγγραφή
+
+        vec += vl;
+        n -= vl;
+    }
 }
 
 void fc_op_backward_input_only(fc_op *op)

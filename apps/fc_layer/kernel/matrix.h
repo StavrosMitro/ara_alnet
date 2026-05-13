@@ -10,11 +10,16 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
 						   float *c, const int M, const int N, const int K);
 void matrix_multiply_nt(const float *a, const float *b, float *c,
 						const int M, const int N, const int K);
+void matrix_multiply_tn(const float *a, const float *b, float *c,
+                        const int M, const int N, const int K);
 void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
                                  const int M, const int N, const int K);
 int matrix_multiply_nt_verify(const float *a, const float *b,
 							  const int M, const int N, const int K,
 							  const float eps);
+int matrix_multiply_tn_verify(const float *a, const float *b,
+                              const int M, const int N, const int K,
+                              const float eps);
 void matrix_transpose(float *x, int m, int n);
 void matrix_multiply_scalar(const float *a, const float *b, float *c,
                                    const int M, const int N, const int K);

@@ -39,6 +39,8 @@ static void matrix_multiply_scalar(const float *a, const float *b, float *c,
                                    const int M, const int N, const int K);
 static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
                                       const int M, const int N, const int K);
+static void matrix_multiply_scalar_tn(const float *a, const float *b, float *c,
+                                      const int M, const int N, const int K);
 static void matrix_multiply_scalar_fused(const float *a, const float *b,
                                          const float *bias, float *c,
                                          const int M, const int N,
@@ -83,20 +85,60 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
         return;
     }
 
+    if (padded_m == (unsigned long int)M) {
+        fmatmul(c, a, b,
+                (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
-    for (size_t idx = 0; idx < mn; idx++)
-        fmatmul_a_scratch[idx] = a[idx];
-    for (size_t idx = mn; idx < pnk; idx++)
-        fmatmul_a_scratch[idx] = 0.0f;
+    size_t remaining_mn = mn;
+    const float *src_mn = a;
+    float *dst_mn = fmatmul_a_scratch;
+    while (remaining_mn > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl;
+        dst_mn += vl;
+        remaining_mn -= vl;
+    }
+
+    size_t remaining = pnk - mn;
+    float *dst = fmatmul_a_scratch + mn;
+    while (remaining > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.x v0, zero");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        dst += vl;
+        remaining -= vl;
+    }
 
     fmatmul(fmatmul_c_scratch, fmatmul_a_scratch, b,
             padded_m, (unsigned long int)N, (unsigned long int)K);
 
-    for (size_t idx = 0; idx < mk; idx++)
-        c[idx] += fmatmul_c_scratch[idx];
+    size_t remaining_mk = mk;
+    const float *src_mk = fmatmul_c_scratch;
+    float *dst_mk = c;
+    while (remaining_mk > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vfadd.vv v8, v8, v0");
+        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl;
+        dst_mk += vl;
+        remaining_mk -= vl;
+    }
 }
 
 void matrix_multiply_fused(const float *a, const float *b, const float *bias,
@@ -127,12 +169,29 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
         return;
     }
 
+    if (padded_m == (unsigned long int)M) {
+        fmatmul_fused(c, a, b, bias,
+                      (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
-    for (size_t idx = 0; idx < mn; idx++)
-        fmatmul_a_scratch[idx] = a[idx];
+    size_t remaining_mn = mn;
+    const float *src_mn = a;
+    float *dst_mn = fmatmul_a_scratch;
+    while (remaining_mn > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl;
+        dst_mn += vl;
+        remaining_mn -= vl;
+    }
 
     size_t remaining = pnk - mn;
     float *dst = fmatmul_a_scratch + mn;
@@ -149,8 +208,19 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, b, bias,
                  padded_m, (unsigned long int)N, (unsigned long int)K);
 
-    for (size_t idx = 0; idx < mk; idx++)
-        c[idx] = fmatmul_c_scratch[idx];
+    size_t remaining_mk = mk;
+    const float *src_mk = fmatmul_c_scratch;
+    float *dst_mk = c;
+    while (remaining_mk > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl;
+        dst_mk += vl;
+        remaining_mk -= vl;
+    }
 }
 
 void matrix_multiply_nt(const float *a, const float *b, float *c,
@@ -184,16 +254,169 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
-    for (size_t idx = 0; idx < mn; idx++)
-        fmatmul_a_scratch[idx] = a[idx];
-    for (size_t idx = mn; idx < pnk; idx++)
-        fmatmul_a_scratch[idx] = 0.0f; //needs optimization
+    if (padded_m == (unsigned long int)M) {
+        fmatmul_nt(fmatmul_c_scratch, a, b,
+                   (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+    } else {
+        size_t remaining_mn = mn;
+        const float *src_mn = a;
+        float *dst_mn = fmatmul_a_scratch;
+        while (remaining_mn > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+            asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+            asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+            src_mn += vl;
+            dst_mn += vl;
+            remaining_mn -= vl;
+        }
 
-    fmatmul_nt(fmatmul_c_scratch, fmatmul_a_scratch, b,
-               padded_m, (unsigned long int)N, (unsigned long int)K);
+        size_t remaining = pnk - mn;
+        float *dst = fmatmul_a_scratch + mn;
+        while (remaining > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+            asm volatile("vmv.v.x v0, zero");
+            asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+            dst += vl;
+            remaining -= vl;
+        }
 
-    for (size_t idx = 0; idx < mk; idx++)
-        c[idx] += fmatmul_c_scratch[idx];
+        fmatmul_nt(fmatmul_c_scratch, fmatmul_a_scratch, b,
+                   padded_m, (unsigned long int)N, (unsigned long int)K);
+    }
+
+    size_t remaining_mk = mk;
+    const float *src_mk = fmatmul_c_scratch;
+    float *dst_mk = c;
+    while (remaining_mk > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vfadd.vv v8, v8, v0");
+        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl;
+        dst_mk += vl;
+        remaining_mk -= vl;
+    }
+}
+
+void matrix_multiply_tn(const float *a, const float *b, float *c,
+                        const int M, const int N, const int K)
+{
+    /**
+     * matrix multiply, c += a^T * b
+     *
+     * Input:
+     * a    [M,N]
+     * b    [M,K]
+     * Output:
+     * c    [N,K]
+     * */
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    unsigned long int block = fmatmul_row_block((unsigned long int)N);
+    unsigned long int padded_n = (((unsigned long int)N + block - 1) / block) * block;
+
+    if (padded_n == (unsigned long int)N) {
+        fmatmul_tn(c, a, b,
+                   (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
+    if (((size_t)M * (size_t)padded_n) > MATRIX_TRANSPOSE_WORKSPACE_ELEMS) {
+        matrix_multiply_scalar_tn(a, b, c, M, N, K);
+        return;
+    }
+
+    float *a_pad = shared_memory_pool;
+    for (int m = 0; m < M; m++)
+    {
+        const float *src_row = a + (size_t)m * (size_t)N;
+        float *dst_row = a_pad + (size_t)m * (size_t)padded_n;
+
+        size_t remaining_row = (size_t)N;
+        while (remaining_row > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_row));
+            asm volatile("vle32.v v0, (%0);" : : "r"(src_row) : "memory");
+            asm volatile("vse32.v v0, (%0);" : : "r"(dst_row) : "memory");
+            src_row += vl;
+            dst_row += vl;
+            remaining_row -= vl;
+        }
+
+        size_t remaining_pad = (size_t)padded_n - (size_t)N;
+        while (remaining_pad > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_pad));
+            asm volatile("vmv.v.x v0, zero");
+            asm volatile("vse32.v v0, (%0);" : : "r"(dst_row) : "memory");
+            dst_row += vl;
+            remaining_pad -= vl;
+        }
+    }
+
+    fmatmul_tn(c, a_pad, b,
+               (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+}
+
+int matrix_multiply_tn_verify(const float *a, const float *b,
+                              const int M, const int N, const int K,
+                              const float eps)
+{
+    if (M <= 0 || N <= 0 || K <= 0)
+        return 0;
+
+    const size_t nk = (size_t)N * (size_t)K;
+    if (nk > MATRIX_TRANSPOSE_WORKSPACE_ELEMS) {
+        printf_("matrix_multiply_tn_verify: dims too large (%d x %d)\n", N, K);
+        return 0;
+    }
+
+    float *tn_out = shared_memory_pool;
+    for (size_t idx = 0; idx < nk; idx++)
+        tn_out[idx] = 0.0f;
+
+    fmatmul_tn(tn_out, a, b,
+               (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+
+    size_t mismatch_count = 0;
+    float max_diff = 0.0f;
+    const float inv_batch = 1.0f / (float)M;
+
+    for (int n = 0; n < N; n++)
+    {
+        for (int k = 0; k < K; k++)
+        {
+            float sum = 0.0f;
+            for (int m = 0; m < M; m++)
+                sum += a[(size_t)m * (size_t)N + (size_t)n] *
+                       b[(size_t)m * (size_t)K + (size_t)k];
+            sum *= inv_batch;
+
+            float diff = fabsf(sum - tn_out[(size_t)n * (size_t)K + (size_t)k]);
+            if (diff > max_diff)
+                max_diff = diff;
+            if (diff > eps)
+                mismatch_count++;
+        }
+    }
+
+    if (mismatch_count == 0)
+        printf_("matrix_multiply_tn_verify: OK (max diff %f)\n", max_diff);
+    else
+        printf_("matrix_multiply_tn_verify: FAIL (mismatches %lu, max diff %f)\n",
+                (unsigned long)mismatch_count, max_diff);
+
+    return (mismatch_count == 0) ? 1 : 0;
 }
 
 void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
@@ -351,6 +574,22 @@ static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
             for (int j = 0; j < N; j++)
                 sum += a_ptr[j] * b_ptr[j];
             c[(size_t)i * (size_t)K + (size_t)k] += sum;
+        }
+    }
+}
+
+static void matrix_multiply_scalar_tn(const float *a, const float *b, float *c,
+                                      const int M, const int N, const int K)
+{
+    for (int n = 0; n < N; n++)
+    {
+        for (int k = 0; k < K; k++)
+        {
+            float sum = 0.0f;
+            for (int m = 0; m < M; m++)
+                sum += a[(size_t)m * (size_t)N + (size_t)n] *
+                       b[(size_t)m * (size_t)K + (size_t)k];
+            c[(size_t)n * (size_t)K + (size_t)k] += sum;
         }
     }
 }
