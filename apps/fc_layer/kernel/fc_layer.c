@@ -161,13 +161,30 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     // calculate delta_bias averaged across batch
     t0 = fc_cycle_count_local();
     
-    for (register int j = 0; j < op->out_units; j++)
-    {
-        register float sum = 0.0f;
-        for (int p = 0; p < op->batchsize; p++)
-            sum += op->d_output[p * op->out_units + j];
-        op->d_bias[j] = sum / op->batchsize;
-    }
+    // for (register int j = 0; j < op->out_units; j++)
+    // {
+    //     register float sum = 0.0f;
+    //     for (int p = 0; p < op->batchsize; p++)
+    //         sum += op->d_output[p * op->out_units + j];
+    //     op->d_bias[j] = sum / op->batchsize;
+    // }
+
+    // Initialize bias accumulator to zero
+    // for (int j = 0; j < op->out_units; j++)
+    //     op->d_bias[j] = 0.0f;
+
+    // // Accumulate over batch, row by row
+    // for (int p = 0; p < op->batchsize; p++) {
+    //     float* row = &(op->d_output[p * op->out_units]);
+    //     for (int j = 0; j < op->out_units; j++) {
+    //         op->d_bias[j] += row[j];
+    //     }
+    // }
+    // // Divide by batchsize
+    // for (int j = 0; j < op->out_units; j++)
+    //     op->d_bias[j] /= op->batchsize;
+
+    calc_bias_gradient_vec_batch2(op->d_bias, op->d_output, op->out_units);
 
     elapsed = fc_cycle_count_local() - t0;
     if (cycles)
@@ -282,3 +299,37 @@ static void matrix_multiply_scalar_fused(const float *a, const float *b,
     }
 }
 
+void calc_bias_gradient_vec_batch2(float *d_bias, const float *d_output, int out_units) 
+{
+    // Explicit pointers  (batchsize = 2)
+    const float *row0 = d_output;
+    const float *row1 = d_output + out_units;
+    float *bias_ptr = d_bias;
+
+    // DIV 2
+    float inv_batch = 0.5f; 
+
+    int j = out_units;
+    
+    while (j > 0) {
+        size_t vl;
+        
+        //LMUL=8 
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(j));
+
+        asm volatile("vle32.v v8, (%0)" :: "r"(row0));
+
+        asm volatile("vle32.v v16, (%0)" :: "r"(row1));
+
+        asm volatile("vfadd.vv v8, v8, v16");
+
+        asm volatile("vfmul.vf v8, v8, %0" :: "f"(inv_batch));
+
+        asm volatile("vse32.v v8, (%0)" :: "r"(bias_ptr));
+
+        row0 += vl;
+        row1 += vl;
+        bias_ptr += vl;
+        j -= vl;
+    }
+}

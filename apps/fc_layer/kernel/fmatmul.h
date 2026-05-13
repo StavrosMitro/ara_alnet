@@ -91,6 +91,9 @@ void fmatmul_16x16_fused(float *c, const float *a, const float *b,
                          const float *bias, unsigned long int m,
                          unsigned long int n, unsigned long int p);
 
+void calc_bias_gradient_vec_batch2(float *d_bias, const float *d_output, int out_units);
+
+
 #define DELTA 0.000001
 
 extern int64_t event_trigger;
