@@ -9,260 +9,220 @@ Total trainable layers: 1/13
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-momentum_sgd args: w=0000000080018000 v=0000000080C2E840 d=0000000080822800 units=1048576
-cycles[epoch 1 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009572, backward_d_weights=16800786, backward_total=29810424, update=23528926, backward_wrapper=55485024
+momentum_sgd args: w=0000000080018000 v=0000000080C26848 d=000000008081A800 units=1048576
+cycles[epoch 1 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23527916, backward_wrapper=55125023
 epoch 1 step 1/2 loss: 1.747252
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 1 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 1 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 1 step 2/2 loss: 1.694667
 >>>>>>>>>>>>>>>>>>>> epoch 2 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 2 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 2 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 2 step 1/2 loss: 1.735164
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 2 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 2 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 2 step 2/2 loss: 1.683380
 >>>>>>>>>>>>>>>>>>>> epoch 3 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 3 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 3 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 3 step 1/2 loss: 1.723161
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 3 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 3 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 3 step 2/2 loss: 1.672165
 >>>>>>>>>>>>>>>>>>>> epoch 4 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 4 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 4 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 4 step 1/2 loss: 1.711240
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 4 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 4 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 4 step 2/2 loss: 1.661025
 >>>>>>>>>>>>>>>>>>>> epoch 5 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 5 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 5 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 5 step 1/2 loss: 1.699403
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 5 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 5 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 5 step 2/2 loss: 1.649961
 >>>>>>>>>>>>>>>>>>>> epoch 6 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 6 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 6 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 6 step 1/2 loss: 1.687647
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 6 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 6 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 6 step 2/2 loss: 1.638969
 >>>>>>>>>>>>>>>>>>>> epoch 7 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 7 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 7 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 7 step 1/2 loss: 1.675972
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 7 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 7 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 7 step 2/2 loss: 1.628054
 >>>>>>>>>>>>>>>>>>>> epoch 8 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 8 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 8 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 8 step 1/2 loss: 1.664378
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 8 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 8 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 8 step 2/2 loss: 1.617209
 >>>>>>>>>>>>>>>>>>>> epoch 9 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 9 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 9 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 9 step 1/2 loss: 1.652864
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 9 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 9 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 9 step 2/2 loss: 1.606437
 >>>>>>>>>>>>>>>>>>>> epoch 10 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 10 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 10 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 10 step 1/2 loss: 1.641430
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 10 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 10 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 10 step 2/2 loss: 1.595737
 >>>>>>>>>>>>>>>>>>>> epoch 11 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 11 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 11 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 11 step 1/2 loss: 1.630075
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 11 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 11 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 11 step 2/2 loss: 1.585109
 >>>>>>>>>>>>>>>>>>>> epoch 12 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 12 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 12 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 12 step 1/2 loss: 1.618799
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 12 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 12 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 12 step 2/2 loss: 1.574551
 >>>>>>>>>>>>>>>>>>>> epoch 13 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 13 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 13 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 13 step 1/2 loss: 1.607602
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 13 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 13 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 13 step 2/2 loss: 1.564064
 >>>>>>>>>>>>>>>>>>>> epoch 14 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 14 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 14 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 14 step 1/2 loss: 1.596481
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 14 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 14 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 14 step 2/2 loss: 1.553647
 >>>>>>>>>>>>>>>>>>>> epoch 15 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 15 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 15 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 15 step 1/2 loss: 1.585437
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 15 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 15 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 15 step 2/2 loss: 1.543300
 >>>>>>>>>>>>>>>>>>>> epoch 16 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 16 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 16 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 16 step 1/2 loss: 1.574469
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 16 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 16 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 16 step 2/2 loss: 1.533021
 >>>>>>>>>>>>>>>>>>>> epoch 17 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 17 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 17 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 17 step 1/2 loss: 1.563578
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 17 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 17 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 17 step 2/2 loss: 1.522811
 >>>>>>>>>>>>>>>>>>>> epoch 18 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 18 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 18 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 18 step 1/2 loss: 1.552763
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 18 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 18 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 18 step 2/2 loss: 1.512670
 >>>>>>>>>>>>>>>>>>>> epoch 19 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 19 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 19 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 19 step 1/2 loss: 1.542021
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 19 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 19 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 19 step 2/2 loss: 1.502596
 >>>>>>>>>>>>>>>>>>>> epoch 20 >>>>>>>>>>>>>>>>>>>>>>
 pred[ 434 115 ]  label[ 100 32 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 20 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 20 batch 1/2]: prep=26757, forward=129525, pred+metric=603668, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 20 step 1/2 loss: 1.531356
 pred[ 75 277 ]  label[ 235 145 ]
 batch accuracy:  0.0000  (0 / 2 correct)
 batch macro F1:  0.0000  (over 4 classes)
-d_input check: OK (max diff 0.000000)
-cycles[epoch 20 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input+bias=13009574, backward_d_weights=16800786, backward_total=29810426, update=23080087, backward_wrapper=55036187
+cycles[epoch 20 batch 2/2]: prep=26757, forward=129525, pred+metric=603666, loss=38998, zero_d_input=8248, backward_d_input=12640322, backward_d_bias=10255, backward_d_weights=16800786, backward_total=29451433, update=23080087, backward_wrapper=54677194
 epoch 20 step 2/2 loss: 1.492590

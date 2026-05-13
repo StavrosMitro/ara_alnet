@@ -26,7 +26,8 @@ typedef struct fc_op {
 } fc_op;
 
 typedef struct fc_backward_cycle_breakdown {
-    int64_t d_input_bias_cycles;
+    int64_t d_input_cycles;
+    int64_t d_bias_cycles;
     int64_t d_weights_cycles;
 } fc_backward_cycle_breakdown;
 

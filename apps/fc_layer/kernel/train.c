@@ -145,7 +145,7 @@ static int64_t last_loss_cycles = 0;
 static int64_t last_zero_dinput_cycles = 0;
 static int64_t last_fc_backward_total_cycles = 0;
 static int64_t last_update_cycles = 0;
-static fc_backward_cycle_breakdown last_fc_backward_breakdown = {0, 0};
+static fc_backward_cycle_breakdown last_fc_backward_breakdown = {0, 0, 0};
 
 static void zero_f32(float *buf, int n)
 {
@@ -380,7 +380,8 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
         last_fc_backward_total_cycles = alexnet_cycle_count_local() - t0;
     } else {
         fc_op_backward_input_only(&(net->fc1));
-        last_fc_backward_breakdown.d_input_bias_cycles = 0;
+        last_fc_backward_breakdown.d_input_cycles = 0;
+        last_fc_backward_breakdown.d_bias_cycles = 0;
         last_fc_backward_breakdown.d_weights_cycles = 0;
         last_fc_backward_total_cycles = 0;
     }
@@ -477,11 +478,12 @@ void alexnet_train(alexnet *net, int epochs)
             backward_alexnet(net, batch_Y, mse_targets_buf, &step_loss);
             backward_wrapper_cycles = alexnet_cycle_count_local() - t0;
 
-                printf_("cycles[epoch %d batch %d/%d]: prep=%ld, forward=%ld, pred+metric=%ld, loss=%ld, zero_d_input=%ld, backward_d_input+bias=%ld, backward_d_weights=%ld, backward_total=%ld, update=%ld, backward_wrapper=%ld\n",
+                printf_("cycles[epoch %d batch %d/%d]: prep=%ld, forward=%ld, pred+metric=%ld, loss=%ld, zero_d_input=%ld, backward_d_input=%ld, backward_d_bias=%ld, backward_d_weights=%ld, backward_total=%ld, update=%ld, backward_wrapper=%ld\n",
                     e + 1, b + 1, steps_per_epoch,
                     prep_cycles, forward_cycles, pred_metric_cycles,
                     last_loss_cycles, last_zero_dinput_cycles,
-                    last_fc_backward_breakdown.d_input_bias_cycles,
+                    last_fc_backward_breakdown.d_input_cycles,
+                    last_fc_backward_breakdown.d_bias_cycles,
                     last_fc_backward_breakdown.d_weights_cycles,
                     last_fc_backward_total_cycles,
                     last_update_cycles,

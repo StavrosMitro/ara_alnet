@@ -16,6 +16,7 @@
 
 // Author: Matheus Cavalcante, ETH Zurich
 //         Samuel Riedel, ETH Zurich
+// modified versions of fmatmul Author: Stavros Mitropoulos, NTUA
 
 #include "fmatmul.h"
 
