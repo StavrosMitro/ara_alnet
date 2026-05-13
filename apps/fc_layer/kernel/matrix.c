@@ -28,7 +28,7 @@ float shared_memory_pool[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 #endif
 
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
-#define FMATMUL_MAX_K FC_MAX_INTERNAL
+#define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
 // float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
 float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
@@ -172,13 +172,13 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
-    if ((unsigned long int)N > FMATMUL_MAX_N ||
-        (unsigned long int)K > FMATMUL_MAX_K ||
-        padded_m > FMATMUL_MAX_M)
-    {
-        matrix_multiply_scalar_nt(a, b, c, M, N, K);
-        return;
-    }
+    // if ((unsigned long int)N > FMATMUL_MAX_N ||
+    //     (unsigned long int)K > FMATMUL_MAX_K ||
+    //     padded_m > FMATMUL_MAX_M)
+    // {
+    //     matrix_multiply_scalar_nt(a, b, c, M, N, K);
+    //     return;
+    // }
 
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;
@@ -187,10 +187,60 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     for (size_t idx = 0; idx < mn; idx++)
         fmatmul_a_scratch[idx] = a[idx];
     for (size_t idx = mn; idx < pnk; idx++)
-        fmatmul_a_scratch[idx] = 0.0f;
+        fmatmul_a_scratch[idx] = 0.0f; //needs optimization
 
     fmatmul_nt(fmatmul_c_scratch, fmatmul_a_scratch, b,
                padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    for (size_t idx = 0; idx < mk; idx++)
+        c[idx] += fmatmul_c_scratch[idx];
+}
+
+void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
+                                 const int M, const int N, const int K)
+{
+    /**
+     * matrix multiply, c += a * b^T (deferred reduction, 4x4 only)
+     *
+     * Input:
+     * a    [M,N]
+     * b    [K,N]
+     * Output:
+     * c    [M,K]
+     * */
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    if (((unsigned long int)K % 4) != 0) {
+        matrix_multiply_nt(a, b, c, M, N, K);
+        return;
+    }
+
+    float *fmatmul_a_scratch = shared_memory_pool;
+    unsigned long int padded_m = (((unsigned long int)M + 3) / 4) * 4;
+
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        matrix_multiply_nt(a, b, c, M, N, K);
+        return;
+    }
+
+    const size_t mn = (size_t)M * (size_t)N;
+    const size_t pnk = (size_t)padded_m * (size_t)N;
+    const size_t mk = (size_t)M * (size_t)K;
+    const size_t mk_pad = (size_t)padded_m * (size_t)K;
+
+    for (size_t idx = 0; idx < mn; idx++)
+        fmatmul_a_scratch[idx] = a[idx];
+    for (size_t idx = mn; idx < pnk; idx++)
+        fmatmul_a_scratch[idx] = 0.0f;
+    for (size_t idx = 0; idx < mk_pad; idx++)
+        fmatmul_c_scratch[idx] = 0.0f;
+
+    fmatmul_4x4_deferred(fmatmul_c_scratch, fmatmul_a_scratch, b,
+                         padded_m, (unsigned long int)N, (unsigned long int)K);
 
     for (size_t idx = 0; idx < mk; idx++)
         c[idx] += fmatmul_c_scratch[idx];
@@ -203,12 +253,12 @@ int matrix_multiply_nt_verify(const float *a, const float *b,
     if (M <= 0 || N <= 0 || K <= 0)
         return 0;
 
-    if ((unsigned long int)M > FMATMUL_MAX_M ||
-        (unsigned long int)K > FMATMUL_MAX_K)
-    {
-        printf_("matrix_multiply_nt_verify: dims too large (%d x %d)\n", M, K);
-        return 0;
-    }
+    // if ((unsigned long int)M > FMATMUL_MAX_M ||
+    //     (unsigned long int)K > FMATMUL_MAX_K)
+    // {
+    //     printf_("matrix_multiply_nt_verify: dims too large (%d x %d)\n", M, K);
+    //     return 0;
+    // }
 
     const size_t mk = (size_t)M * (size_t)K;
     for (size_t idx = 0; idx < mk; idx++) {

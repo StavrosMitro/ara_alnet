@@ -26,7 +26,7 @@
 #endif
 
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
-#define FMATMUL_MAX_K FC_MAX_INTERNAL
+#define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
 
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
@@ -143,20 +143,24 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 
     // calculate delta_input per sample using A * B^T
     t0 = fc_cycle_count_local();
-#ifdef FMATMUL_NT_VERIFY
-    matrix_multiply_nt_verify(op->d_output, op->weights,
-                              op->batchsize, op->out_units,
-                              op->in_units, 1e-4f);
-#endif
-    //d_input calculation
+// #ifdef FMATMUL_NT_VERIFY
+    // matrix_multiply_nt_verify(op->d_output, op->weights,
+    //                           op->batchsize, op->out_units,
+    //                           op->in_units, 1e-4f);
+// #endif
+    // d_input calculation
     matrix_multiply_nt(op->d_output, op->weights, op->d_input,
-                       op->batchsize, op->out_units, op->in_units);
+                       op->batchsize, op->out_units, op->in_units); 
+    
+
+
     int64_t elapsed = fc_cycle_count_local() - t0;
     if (cycles)
         cycles->d_input_cycles += elapsed;
 
     // calculate delta_bias averaged across batch
     t0 = fc_cycle_count_local();
+    
     for (register int j = 0; j < op->out_units; j++)
     {
         register float sum = 0.0f;
@@ -164,6 +168,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
             sum += op->d_output[p * op->out_units + j];
         op->d_bias[j] = sum / op->batchsize;
     }
+
     elapsed = fc_cycle_count_local() - t0;
     if (cycles)
         cycles->d_bias_cycles += elapsed;

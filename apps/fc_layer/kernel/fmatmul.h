@@ -46,6 +46,10 @@ void fmatmul_4x4_nt(float *c, const float *a, const float *b,
 void fmatmul_vec_4x4_nt(float *c, const float *a, const float *b,
                         unsigned long int n, unsigned long int p);
 
+void fmatmul_4x4_deferred(float *c, const float *a, const float *b,
+                          unsigned long int m, unsigned long int n,
+                          unsigned long int p);
+
 void fmatmul_4x4_fused(float *c, const float *a, const float *b,
                        const float *bias, unsigned long int m,
                        unsigned long int n, unsigned long int p);

@@ -10,6 +10,8 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
 						   float *c, const int M, const int N, const int K);
 void matrix_multiply_nt(const float *a, const float *b, float *c,
 						const int M, const int N, const int K);
+void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
+                                 const int M, const int N, const int K);
 int matrix_multiply_nt_verify(const float *a, const float *b,
 							  const int M, const int N, const int K,
 							  const float eps);
