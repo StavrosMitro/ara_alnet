@@ -578,10 +578,10 @@ void fmatmul_vec_4x4_nt(float *c, const float *a, const float *b,
 
 void fmatmul_vec_4x4_tn(float *c, const float *a, const float *b,
                         const unsigned long int N, const unsigned long int P,
-                        const unsigned long int lda) {
+                        const unsigned long int lda) { //could use smaller LMUL=1/2
   float t0, t1, t2, t3;
 
-  if (N <= 2) {
+  if (N <= 2) { //batchsize=2
     const float *a_row = a;
     for (unsigned long int m = 0; m < N; m++) {
       asm volatile("vle32.v v16, (%0);" ::"r"(b));

@@ -152,6 +152,27 @@ static void zero_f32(float *buf, int n)
     memset(buf, 0, (size_t)n * sizeof(float));
 }
 
+static void zero_f32_vec(float *buf, int n)
+{
+    size_t max_vl;
+    
+
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(max_vl));
+
+    asm volatile("vmv.v.i v8, 0");
+
+    float *ptr = buf;
+    while (n > 0) {
+        size_t vl;
+        
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+
+        asm volatile("vse32.v v8, (%0)" :: "r"(ptr));
+
+        ptr += vl;
+        n -= vl;
+    }
+}
 
 static uint64_t checksum_bytes(const unsigned char *bytes, size_t len)
 {
@@ -353,8 +374,8 @@ void calloc_alexnet_d_params(alexnet *net)
 {
     net->fc1.d_weights = d_fc1_weights;
     net->fc1.d_bias = d_fc1_bias;
-    zero_f32(net->fc1.d_weights, net->fc1.in_units * net->fc1.out_units);
-    zero_f32(net->fc1.d_bias, net->fc1.out_units);
+    zero_f32_vec(net->fc1.d_weights, net->fc1.in_units * net->fc1.out_units);
+    zero_f32_vec(net->fc1.d_bias, net->fc1.out_units);
 }
 
 void free_alexnet_d_params(alexnet *net)
@@ -394,6 +415,58 @@ static float mse_loss(float *delta_preds, const float *preds, const float *targe
     return mse_loss_val;
 }
 
+static float mse_loss_vec(float *delta_preds, const float *preds, const float *targets, int units, int BATCH_SIZE)
+{
+    int total_elems = BATCH_SIZE * units;
+    
+    //$\sum (0.5 \cdot d^2) = 0.5 \cdot \sum (d^2)$
+
+    float scale_factor = 0.5f / (float)total_elems;
+
+    size_t max_vl; //vector length * 8 basically due LMUL=8
+    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
+
+    asm volatile("vmv.v.i v8, 0");
+
+    int n = total_elems;
+    const float *p_ptr = preds;
+    const float *t_ptr = targets;
+    float *d_ptr = delta_preds;
+
+    while (n > 0) {
+        size_t vl;
+        
+        asm volatile("vsetvli %0, %1, e32, m8, tu, ma" : "=r"(vl) : "r"(n)); //we have set max_vl and compare with n=total_elements
+
+        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr));
+        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
+
+        asm volatile("vfsub.vv v16, v16, v24");
+
+        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
+
+        asm volatile("vfmacc.vv v8, v16, v16");
+
+        p_ptr += vl;
+        t_ptr += vl;
+        d_ptr += vl;
+        n -= vl;
+    }
+
+    // reduction
+    
+
+    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");   // set vl = VLMAX
+    asm volatile("vmv.v.i v0, 0");                         // zero entire v0..v7 group
+    asm volatile("vfredsum.vs v0, v8, v0");               // sum all elements of v8..v15 into v0[0]
+    float sum_squares;
+    asm volatile("vfmv.f.s %0, v0" : "=f"(sum_squares));
+
+    float mse_loss_val = sum_squares * scale_factor;
+    
+    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
+    return mse_loss_val;
+}
 
 
 void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targets, float *loss_out)
@@ -423,13 +496,13 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
 #if defined(SET_CEL)
     loss_val = cross_entropy_loss(curr_grad, net->fc1.output, batch_Y, net->fc1.out_units, net->batchsize);
 #else
-    loss_val = mse_loss(curr_grad, net->fc1.output, batch_targets, net->fc1.out_units, net->batchsize);
+    loss_val = mse_loss_vec(curr_grad, net->fc1.output, batch_targets, net->fc1.out_units, net->batchsize);
 #endif
     last_loss_cycles = alexnet_cycle_count_local() - t0;
 
     net->fc1.d_input = next_grad;
     t0 = alexnet_cycle_count_local();
-    zero_f32(net->fc1.d_input, net->batchsize * net->fc1.in_units);
+    zero_f32_vec(net->fc1.d_input, net->batchsize * net->fc1.in_units);
     last_zero_dinput_cycles = alexnet_cycle_count_local() - t0;
     net->fc1.d_output = curr_grad;
 

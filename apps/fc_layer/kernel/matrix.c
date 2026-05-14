@@ -442,13 +442,13 @@ void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
     float *fmatmul_a_scratch = shared_memory_pool;
     unsigned long int padded_m = (((unsigned long int)M + 3) / 4) * 4;
 
-    if ((unsigned long int)N > FMATMUL_MAX_N ||
-        (unsigned long int)K > FMATMUL_MAX_K ||
-        padded_m > FMATMUL_MAX_M)
-    {
-        matrix_multiply_nt(a, b, c, M, N, K);
-        return;
-    }
+    // if ((unsigned long int)N > FMATMUL_MAX_N ||
+    //     (unsigned long int)K > FMATMUL_MAX_K ||
+    //     padded_m > FMATMUL_MAX_M)
+    // {
+    //     matrix_multiply_nt(a, b, c, M, N, K);
+    //     return;
+    // }
 
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;

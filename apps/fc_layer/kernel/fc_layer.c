@@ -145,7 +145,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     t0 = fc_cycle_count_local();
 
     // d_input calculation
-    matrix_multiply_nt(op->d_output, op->weights, op->d_input,
+    matrix_multiply_nt_deferred(op->d_output, op->weights, op->d_input,
                        op->batchsize, op->out_units, op->in_units); 
     
 
