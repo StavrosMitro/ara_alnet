@@ -279,6 +279,20 @@ static void matrix_multiply_scalar_fused(const float *a, const float *b,
 
 void calc_bias_gradient_vec_batch2(float *d_bias, const float *d_output, int out_units) 
 {
+    /*
+    // calculate delta_bias averaged across batch
+    // Initialize bias accumulator to zero
+    for (int j = 0; j < op->out_units; j++)
+        op->d_bias[j] = 0.0f;
+
+    // Accumulate over batch, row by row
+    for (int p = 0; p < op->batchsize; p++) {
+        float* row = &(op->d_output[p * op->out_units]); //start of a batch
+        for (int j = 0; j < op->out_units; j++) {
+            op->d_bias[j] += row[j];
+        }
+    }
+    */
     // Explicit pointers  (batchsize = 2)
     const float *row0 = d_output;
     const float *row1 = d_output + out_units;
