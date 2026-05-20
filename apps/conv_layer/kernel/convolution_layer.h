@@ -51,6 +51,7 @@ typedef struct conv_op {
 
 
 void conv_op_forward(conv_op *op);
+void conv_op_forward_im2col(conv_op *op);
 void conv_op_backward(conv_op *op);
 void conv_op_backward_full(conv_op *op);
 void conv_op_backward_input_only(conv_op *op);

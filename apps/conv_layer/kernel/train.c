@@ -1,8 +1,8 @@
 //
 // File:        train.c
-// Description: Convolution-only training flow
+// Description: Convolution-layer training flow
 // Author:      Haris Wang
-// modified: Stavros Mitropoulos
+//
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -51,7 +51,20 @@ static inline int64_t alexnet_cycle_count_local(void)
 #define ALEXNET_LOG_LAYER(...)
 #endif
 
+#ifndef ALEXNET_STATIC_MAX_BATCH
+#ifdef ALEXNET_BATCHSIZE
+#define ALEXNET_STATIC_MAX_BATCH ALEXNET_BATCHSIZE
+#else
+#define ALEXNET_STATIC_MAX_BATCH 4
+#endif
+#endif
+
 #define CONV_TOTAL_SAMPLES 4
+#define CONV1_PAD (CONV1_PADDING)
+#define CONV1_PADDED_H (CONV1_IN_H + 2 * CONV1_PAD)
+#define CONV1_PADDED_W (CONV1_IN_W + 2 * CONV1_PAD)
+#define CONV1_PADDED_IN_UNITS (CONV1_IN_CHANNELS * CONV1_PADDED_H * CONV1_PADDED_W)
+#define CONV1_XCOL_PER_IMG (CONV1_IN_CHANNELS * CONV1_KERNEL_L * CONV1_KERNEL_L * CONV1_OUT_W * CONV1_OUT_H)
 
 static float d_conv1_weights[CONV1_WEIGHT_ELEMS];
 static float d_conv1_bias[CONV1_OUT_CHANNELS];
@@ -60,9 +73,15 @@ static float v_conv1_bias[CONV1_OUT_CHANNELS];
 
 static float d_conv1_output_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
 static float d_conv1_input_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_IN_UNITS];
+static float d_conv1_input_pad_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_PADDED_IN_UNITS];
 
 static float train_input_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_IN_UNITS];
+static float train_input_pad_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_PADDED_IN_UNITS];
 static float train_targets_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
+
+static float compare_output_ref[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
+static float compare_output_pad[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
+static float compare_input_col_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_XCOL_PER_IMG];
 
 static int64_t last_loss_cycles = 0;
 static int64_t last_zero_dinput_cycles = 0;
@@ -77,108 +96,137 @@ static void zero_f32(float *buf, int n)
 static void zero_f32_vec(float *buf, int n)
 {
     size_t max_vl;
-    
-
     asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(max_vl));
-
     asm volatile("vmv.v.i v8, 0");
 
     float *ptr = buf;
     while (n > 0) {
         size_t vl;
-        
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
-
         asm volatile("vse32.v v8, (%0)" :: "r"(ptr));
-
         ptr += vl;
         n -= vl;
     }
 }
 
-static uint64_t checksum_bytes(const unsigned char *bytes, size_t len)
+static void pad_tensor(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
 {
-    uint64_t hash = 1469598103934665603ULL;
-    for (size_t i = 0; i < len; i++) {
-        hash ^= (uint64_t)bytes[i];
-        hash *= 1099511628211ULL;
-    }
-    return hash;
-}
+    int out_h = in_h + 2 * pad;
+    int out_w = in_w + 2 * pad;
+    size_t total = (size_t)batch * (size_t)channels * (size_t)out_h * (size_t)out_w;
+    memset(dst, 0, total * sizeof(float));
 
-static uint64_t checksum_f32(const float *arr, size_t n)
-{
-    return checksum_bytes((const unsigned char *)arr, n * sizeof(float));
-}
-
-static uint64_t checksum_i32(const int *arr, size_t n)
-{
-    return checksum_bytes((const unsigned char *)arr, n * sizeof(int));
-}
-
-
-static float cross_entropy_loss(float *delta_preds, const float *preds, const int *labels, int units, int BATCH_SIZE)
-{
-    /**
-     * Cross Entropy backward
-     * 
-     * Input:
-     *      preds       [BATCH_SIZE, units]
-     *      labels      [BATCH_SIZE]
-     * Output:
-     *      delta_preds [BATCH_SIZE, units]  (per-sample gradients)
-     * */
-    float ce_loss = 0;
-    for (int p = 0; p < BATCH_SIZE; p++)
-    {
-        // find max for numerical stability (log-sum-exp trick)
-        register float max_val = preds[p*units];
-        for (int i = 1; i < units; i++)
-            if (preds[i+p*units] > max_val) max_val = preds[i+p*units];
-
-        register float esum = 0;
-        for (int i = 0; i < units; i++)
-            esum += exp(preds[i+p*units] - max_val);
-
-        ce_loss += 0 - log(exp(preds[labels[p]+p*units] - max_val) / esum);
-
-        for (int i = 0; i < units; i++)
-        {
-            if (labels[p] == i) {
-                delta_preds[p * units + i] = exp(preds[i+p*units] - max_val) / esum - 1;
-            }else {
-                delta_preds[p * units + i] = exp(preds[i+p*units] - max_val) / esum;
-            } 
+    int in_plane = in_h * in_w;
+    int out_plane = out_h * out_w;
+    for (int b = 0; b < batch; b++) {
+        const float *src_b = src + b * channels * in_plane;
+        float *dst_b = dst + b * channels * out_plane;
+        for (int c = 0; c < channels; c++) {
+            const float *src_c = src_b + c * in_plane;
+            float *dst_c = dst_b + c * out_plane + pad * out_w + pad;
+            for (int y = 0; y < in_h; y++) {
+                memcpy(dst_c + y * out_w, src_c + y * in_w, (size_t)in_w * sizeof(float));
+            }
         }
     }
-    ce_loss /= BATCH_SIZE;
-    ALEXNET_LOG_LAYER("cross entropy loss computed\n");
-    return ce_loss;
 }
 
+static void unpad_tensor(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
+{
+    int padded_h = in_h + 2 * pad;
+    int padded_w = in_w + 2 * pad;
+    int out_plane = in_h * in_w;
+    int in_plane = padded_h * padded_w;
+    for (int b = 0; b < batch; b++) {
+        const float *src_b = src + b * channels * in_plane;
+        float *dst_b = dst + b * channels * out_plane;
+        for (int c = 0; c < channels; c++) {
+            const float *src_c = src_b + c * in_plane + pad * padded_w + pad;
+            float *dst_c = dst_b + c * out_plane;
+            for (int y = 0; y < in_h; y++) {
+                memcpy(dst_c + y * in_w, src_c + y * padded_w, (size_t)in_w * sizeof(float));
+            }
+        }
+    }
+}
 
-static float v_fc1_weights[FC_INPUT_UNITS * FC_OUTPUT_UNITS];
-static float v_fc1_bias[FC_OUTPUT_UNITS];
+static void compare_padding_paths(alexnet *net, const float *input_unpadded, const float *input_padded)
+{
+    (void)input_unpadded;
 
+    conv_op old_op = net->conv1;
+    old_op.input = (float *)input_padded;
+    old_op.output = compare_output_ref;
+    old_op.in_w = CONV1_PADDED_W;
+    old_op.in_h = CONV1_PADDED_H;
+    old_op.in_units = CONV1_PADDED_IN_UNITS;
+    old_op.padding = 0;
+    old_op.layer_id = 5;
+    old_op.input_col = compare_input_col_buf;
+    conv_op_forward_im2col(&old_op);
 
+    conv_op new_op = old_op;
+    new_op.output = compare_output_pad;
+    new_op.input_col = NULL;
+    conv_op_forward(&new_op);
+
+    int total = net->batchsize * new_op.out_units;
+    float max_diff = 0.0f;
+    int max_idx = -1;
+    for (int i = 0; i < total; i++) {
+        float diff = fabsf(compare_output_ref[i] - compare_output_pad[i]);
+        if (diff > max_diff) {
+            max_diff = diff;
+            max_idx = i;
+        }
+    }
+    printf_("padding compare: max_abs_diff=%.6f idx=%d\n", max_diff, max_idx);
+}
+
+static float mse_loss_vec(float *delta_preds, const float *preds, const float *targets, int units, int batch_size)
+{
+    int total_elems = batch_size * units;
+    float scale_factor = 0.5f / (float)total_elems;
+
+    size_t max_vl;
+    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
+    asm volatile("vmv.v.i v8, 0");
+
+    int n = total_elems;
+    const float *p_ptr = preds;
+    const float *t_ptr = targets;
+    float *d_ptr = delta_preds;
+
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, tu, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr));
+        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
+
+        asm volatile("vfsub.vv v16, v16, v24");
+        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
+        asm volatile("vfmacc.vv v8, v16, v16");
+
+        p_ptr += vl;
+        t_ptr += vl;
+        d_ptr += vl;
+        n -= vl;
+    }
+
+    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");
+    asm volatile("vmv.v.i v0, 0");
+    asm volatile("vfredsum.vs v0, v8, v0");
+    float sum_squares;
+    asm volatile("vfmv.f.s %0, v0" : "=f"(sum_squares));
+
+    float mse_loss_val = sum_squares * scale_factor;
+    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
+    return mse_loss_val;
+}
 
 static inline void CLIP(float *x, float down, float up)
 {
     *x = MIN(up, MAX(down, *x));
-}
-
-static void momentum_sgd(float *w, float *v_w, float *d_w, int units)
-{
-    for (int i = 0; i < units; i++) {
-#if ALEXNET_USE_MOMENTUM
-        v_w[i] = 0.9f * v_w[i] - LEARNING_RATE * d_w[i];
-        CLIP(v_w + i, -1.0f, 1.0f);
-        w[i] = w[i] + v_w[i];
-#else
-        (void)v_w;
-        w[i] = w[i] - LEARNING_RATE * d_w[i];
-#endif
-    }
 }
 
 static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
@@ -193,26 +241,16 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 
     while (n > 0) {
         size_t vl;
-        
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
 
-        // v8: Velocity (v_w), v16: Gradients (d_w), v24: Weights (w)
         asm volatile("vle32.v v8,  (%0)" :: "r"(v_w));
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
         asm volatile("vle32.v v24, (%0)" :: "r"(w));
 
-        // 2. v_w = v_w * 0.9f
         asm volatile("vfmul.vf v8, v8, %0" :: "f"(momentum));
-
-        // 3. v_w = v_w - LR * d_w
-        // vfnmsac = Vector Floating-point Negative Multiply-Subtract Accumulate
-        // vd = -(rs1 * vs2) + vd
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
-
-        // 4. CLIP(v_w, -1.0f, 1.0f)
         asm volatile("vfmax.vf v8, v8, %0" :: "f"(clip_min));
         asm volatile("vfmin.vf v8, v8, %0" :: "f"(clip_max));
-
         asm volatile("vfadd.vv v24, v24, v8");
 
         asm volatile("vse32.v v8,  (%0)" :: "r"(v_w));
@@ -231,10 +269,7 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 
         asm volatile("vle32.v v8,  (%0)" :: "r"(w));
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
-
-        // w = w - LR * d_w (Με χρήση της εντολής Negative MAC)
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
-
         asm volatile("vse32.v v8,  (%0)" :: "r"(w));
 
         w += vl;
@@ -244,128 +279,32 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 #endif
 }
 
-
-static void gradient_descent_a(void *argv)
-{
-    alexnet *net = (alexnet *)argv;
-    if (net->trainable.fc1)
-        momentum_sgd_vec(fc1_weights, v_fc1_weights, d_fc1_weights,
-                     FC_INPUT_UNITS * FC_OUTPUT_UNITS);
-}
-
-static void gradient_descent_d(void *argv)
-{
-    alexnet *net = (alexnet *)argv;
-    if (net->trainable.fc1)
-        momentum_sgd_vec(fc1_bias, v_fc1_bias, d_fc1_bias,
-                     FC_OUTPUT_UNITS);
-}
-
 static void gradient_descent(alexnet *net)
 {
-    if (!net->trainable.conv1) {
+    if (!net->trainable.conv1)
         return;
-    }
-    momentum_sgd(conv1_weights, v_conv1_weights, d_conv1_weights, CONV1_WEIGHT_ELEMS);
-    momentum_sgd(conv1_bias, v_conv1_bias, d_conv1_bias, CONV1_OUT_CHANNELS);
+
+    net->conv1.weights = conv1_weights;
+    net->conv1.bias = conv1_bias;
+    net->conv1.d_weights = d_conv1_weights;
+    net->conv1.d_bias = d_conv1_bias;
+
+    momentum_sgd_vec(conv1_weights, v_conv1_weights, d_conv1_weights, CONV1_WEIGHT_ELEMS);
+    momentum_sgd_vec(conv1_bias, v_conv1_bias, d_conv1_bias, CONV1_OUT_CHANNELS);
 }
 
 void calloc_alexnet_d_params(alexnet *net)
 {
     net->conv1.d_weights = d_conv1_weights;
     net->conv1.d_bias = d_conv1_bias;
-    zero_f32(net->conv1.d_weights, CONV1_WEIGHT_ELEMS);
-    zero_f32(net->conv1.d_bias, CONV1_OUT_CHANNELS);
+    zero_f32_vec(net->conv1.d_weights, CONV1_WEIGHT_ELEMS);
+    zero_f32_vec(net->conv1.d_bias, CONV1_OUT_CHANNELS);
 }
 
 void free_alexnet_d_params(alexnet *net)
 {
     net->conv1.d_weights = NULL;
     net->conv1.d_bias = NULL;
-}
-
-static float mse_loss(float *delta_preds, const float *preds, const float *targets, int units, int BATCH_SIZE)
-{
-    /**
-     * Mean Squared Error backward
-     * * Input:
-     * preds       [BATCH_SIZE, units]
-     * targets     [BATCH_SIZE, units]
-     * Output:
-     * delta_preds [BATCH_SIZE, units] (per-sample gradients)
-     * */
-    float mse_loss_val = 0;
-
-    for (int p = 0; p < BATCH_SIZE; p++)
-    {
-        for (int i = 0; i < units; i++)
-        {
-            int idx = p * units + i;
-            
-            float diff = preds[idx] - targets[idx];
-            
-            delta_preds[idx] = diff; 
-            
-            mse_loss_val += 0.5f * diff * diff;
-        }
-    }
-    
-    mse_loss_val /= (BATCH_SIZE * units);
-    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
-    return mse_loss_val;
-}
-
-static float mse_loss_vec(float *delta_preds, const float *preds, const float *targets, int units, int BATCH_SIZE)
-{
-    int total_elems = BATCH_SIZE * units;
-    
-    //$\sum (0.5 \cdot d^2) = 0.5 \cdot \sum (d^2)$
-
-    float scale_factor = 0.5f / (float)total_elems;
-
-    size_t max_vl; //vector length * 8 basically due LMUL=8
-    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
-
-    asm volatile("vmv.v.i v8, 0");
-
-    int n = total_elems;
-    const float *p_ptr = preds;
-    const float *t_ptr = targets;
-    float *d_ptr = delta_preds;
-
-    while (n > 0) {
-        size_t vl;
-        
-        asm volatile("vsetvli %0, %1, e32, m8, tu, ma" : "=r"(vl) : "r"(n)); //we have set max_vl and compare with n=total_elements
-
-        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr));
-        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
-
-        asm volatile("vfsub.vv v16, v16, v24");
-
-        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
-
-        asm volatile("vfmacc.vv v8, v16, v16");
-
-        p_ptr += vl;
-        t_ptr += vl;
-        d_ptr += vl;
-        n -= vl;
-    }
-
-    // reduction
-    
-
-    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");   // set vl = VLMAX
-    asm volatile("vmv.v.i v0, 0");                         // zero entire v0..v7 group
-    asm volatile("vfredsum.vs v0, v8, v0");               // sum all elements of v8..v15 into v0[0]
-    float sum_squares;
-    asm volatile("vfmv.f.s %0, v0" : "=f"(sum_squares));
-
-    float mse_loss_val = sum_squares * scale_factor;
-    
-    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
-    return mse_loss_val;
 }
 
 void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targets, float *loss_out)
@@ -380,17 +319,17 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
     calloc_alexnet_d_params(net);
 
     float *curr_grad = d_conv1_output_buf;
-    float *next_grad = d_conv1_input_buf;
-    int total_out_elems = net->batchsize * net->conv1.out_units;
+    float *next_grad = d_conv1_input_pad_buf;
+    float loss_val = 0.0f;
     int64_t t0 = 0;
 
     t0 = alexnet_cycle_count_local();
-    float loss_val = mse_loss(curr_grad, net->conv1.output, batch_targets, total_out_elems);
+    loss_val = mse_loss_vec(curr_grad, net->conv1.output, batch_targets, net->conv1.out_units, net->batchsize);
     last_loss_cycles = alexnet_cycle_count_local() - t0;
 
     net->conv1.d_input = next_grad;
     t0 = alexnet_cycle_count_local();
-    zero_f32(net->conv1.d_input, net->batchsize * net->conv1.in_units);
+    zero_f32_vec(net->conv1.d_input, net->batchsize * net->conv1.in_units);
     last_zero_dinput_cycles = alexnet_cycle_count_local() - t0;
     net->conv1.d_output = curr_grad;
 
@@ -401,6 +340,10 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
         conv_op_backward_input_only(&(net->conv1));
     }
     last_backward_cycles = alexnet_cycle_count_local() - t0;
+
+    unpad_tensor(d_conv1_input_buf, d_conv1_input_pad_buf,
+                 net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
+    net->conv1.d_input = d_conv1_input_buf;
 
     t0 = alexnet_cycle_count_local();
     gradient_descent(net);
@@ -417,8 +360,12 @@ void alexnet_train(alexnet *net, int epochs)
         exit(1);
     }
 
-    net->input = train_input_buf;
+    net->input = train_input_pad_buf;
     float *batch_targets = train_targets_buf;
+    net->conv1.padding = 0;
+    net->conv1.in_w = CONV1_PADDED_W;
+    net->conv1.in_h = CONV1_PADDED_H;
+    net->conv1.in_units = CONV1_PADDED_IN_UNITS;
 
     int dataset_count = CONV_TOTAL_SAMPLES;
     int steps_per_epoch = dataset_count / net->batchsize;
@@ -430,21 +377,27 @@ void alexnet_train(alexnet *net, int epochs)
     ALEXNET_LOG_LAYER("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>> training begin >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     for (int e = 0; e < epochs; e++) {
         printf_(">>>>>>>>>>>>>>>>>>>> epoch %d >>>>>>>>>>>>>>>>>>>>>>\n", e + 1);
+        static int compare_once = 0;
         for (int b = 0; b < steps_per_epoch; b++) {
             float step_loss = 0.0f;
             int64_t prep_cycles = 0;
             int64_t forward_cycles = 0;
-            int64_t backward_cycles = 0;
             int64_t t0 = 0;
 
             t0 = alexnet_cycle_count_local();
             int sample_offset = (b * net->batchsize) % dataset_count;
-            memcpy(net->input,
-                   test_inputs + sample_offset * CONV1_IN_UNITS,
-                   (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
+                 memcpy(train_input_buf,
+                     test_inputs + sample_offset * CONV1_IN_UNITS,
+                     (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
             memcpy(batch_targets,
                    test_targets + sample_offset * CONV1_OUT_UNITS,
                    (size_t)net->batchsize * CONV1_OUT_UNITS * sizeof(float));
+                 pad_tensor(train_input_pad_buf, train_input_buf,
+                      net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
+                 if (!compare_once) {
+                  compare_padding_paths(net, train_input_buf, train_input_pad_buf);
+                  compare_once = 1;
+                 }
             prep_cycles = alexnet_cycle_count_local() - t0;
 
             t0 = alexnet_cycle_count_local();
@@ -453,7 +406,7 @@ void alexnet_train(alexnet *net, int epochs)
 
             t0 = alexnet_cycle_count_local();
             backward_alexnet(net, NULL, batch_targets, &step_loss);
-            backward_cycles = alexnet_cycle_count_local() - t0;
+            (void)t0;
 
             printf_("cycles[epoch %d batch %d/%d]: prep=%ld, forward=%ld, loss=%ld, zero_d_input=%ld, backward=%ld, update=%ld\n",
                     e + 1, b + 1, steps_per_epoch,
@@ -463,7 +416,7 @@ void alexnet_train(alexnet *net, int epochs)
             printf_("epoch %d step %d/%d loss: %.6f\n", e + 1, b + 1, steps_per_epoch, step_loss);
         }
     }
-    ALEXNET_LOG_LAYER(">>>>>>>>>>>>>>>>>>>>>>>>>>> training end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
+    ALEXNET_LOG_LAYER(">>>>>>>>>>>>>>>>>>>>>>>>>>>> training end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 }
 
 void alexnet_test(alexnet *net)
@@ -473,17 +426,23 @@ void alexnet_test(alexnet *net)
         exit(1);
     }
 
-    net->input = train_input_buf;
-    memcpy(net->input,
-           test_inputs,
-           (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
+        net->input = train_input_pad_buf;
+        net->conv1.padding = 0;
+        net->conv1.in_w = CONV1_PADDED_W;
+        net->conv1.in_h = CONV1_PADDED_H;
+        net->conv1.in_units = CONV1_PADDED_IN_UNITS;
+        memcpy(train_input_buf,
+            test_inputs,
+            (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
     memcpy(train_targets_buf,
            test_targets,
            (size_t)net->batchsize * CONV1_OUT_UNITS * sizeof(float));
+        pad_tensor(train_input_pad_buf, train_input_buf,
+             net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
 
     forward_alexnet(net);
-    float loss = mse_loss(d_conv1_output_buf, net->conv1.output, train_targets_buf,
-                          net->batchsize * net->conv1.out_units);
+    float loss = mse_loss_vec(d_conv1_output_buf, net->conv1.output, train_targets_buf,
+                              net->conv1.out_units, net->batchsize);
     printf_("test loss: %.6f\n", loss);
 }
 
