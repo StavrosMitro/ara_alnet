@@ -19,7 +19,7 @@ static void fconv3d_CHx3x3_block_f32(float *o, const float *i, const float *f,
     const float *i_row = i;
     float *o_row = o;
 
-    for (int64_t m = 0; m < M; ++m) {
+    for (int64_t m = 0; m < M; ++m) { //m because of padding
         // asm volatile("vmv.v.i v20, 0");
         asm volatile("vfmv.v.f v20, %0" :: "f"(bias));
         
@@ -37,7 +37,7 @@ static void fconv3d_CHx3x3_block_f32(float *o, const float *i, const float *f,
             asm volatile("vle32.v v12, (%0)" :: "r"(row2));
 
             asm volatile("vfslide1down.vf v2,  v0,  %0" :: "f"(*slide0++));
-            asm volatile("vfslide1down.vf v4,  v2,  %0" :: "f"(*slide0++));
+            asm volatile("vfslide1down.vf v4,  v2,  %0" :: "f"(*slide0++)); //2 slides for the weight sees all the right pixels
             asm volatile("vfslide1down.vf v8,  v6,  %0" :: "f"(*slide1++));
             asm volatile("vfslide1down.vf v10, v8,  %0" :: "f"(*slide1++));
             asm volatile("vfslide1down.vf v14, v12, %0" :: "f"(*slide2++));

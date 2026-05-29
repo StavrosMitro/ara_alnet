@@ -73,7 +73,7 @@ endif
 FC_LAYER_MODE ?= train
 FC_LAYER_LOSS ?= MSE
 FC_LAYER_BATCHSIZE ?= 2
-FC_LAYER_EPOCHS ?= 20
+FC_LAYER_EPOCHS ?= 1
 FC_LAYER_INFER_IDX ?= -1
 FC_LAYER_STATIC_MAX_BATCH ?= $(FC_LAYER_BATCHSIZE)
 
@@ -97,6 +97,8 @@ FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
 
 # fc_layer needs: (1) compile-time train/loss knobs, (2) autovectorization off,
 # (3) assembler include root for data.S .incbin paths.
+bin/fc_layer:  $(APPS_DIR)/Makefile
+bin/fc_layer%: $(APPS_DIR)/Makefile
 bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
 bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
 bin/fc_layer:  AUTOVECTORIZE = 0
@@ -109,6 +111,45 @@ bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
 # Workaround: keep app-level autovectorization on, but compile training update
 # code without vectorization to avoid Spike runtime corruption in momentum_sgd.
 fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# conv_layer profile controls (mirrors fc_layer semantics)
+CONV_LAYER_MODE ?= train
+CONV_LAYER_BATCHSIZE ?= 4
+CONV_LAYER_EPOCHS ?= 100
+CONV_LAYER_INFER_IDX ?= -1
+CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
+
+ifeq ($(CONV_LAYER_MODE),train)
+CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(CONV_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(CONV_LAYER_EPOCHS)
+else ifeq ($(CONV_LAYER_MODE),inference)
+CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(CONV_LAYER_INFER_IDX)
+else
+$(error Unsupported CONV_LAYER_MODE='$(CONV_LAYER_MODE)'. Use train or inference)
+endif
+
+CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES)
+
+# conv_layer needs: (1) compile-time train knobs, (2) autovectorization off,
+# (3) assembler include root for data.S .incbin paths.
+bin/conv_layer:  $(APPS_DIR)/Makefile
+bin/conv_layer%: $(APPS_DIR)/Makefile
+bin/conv_layer:  ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer%: ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer:  AUTOVECTORIZE = 0
+bin/conv_layer%: AUTOVECTORIZE = 0
+bin/conv_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+
+# Match fc_layer Spike compile flags for training update objects.
+conv_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# Ensure conv_layer objects rebuild when Makefile-defined knobs change.
+conv_layer/%.c.o: $(APPS_DIR)/Makefile
+conv_layer/%.S.o: $(APPS_DIR)/Makefile
+conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
+conv_layer/%.S.o.spike: $(APPS_DIR)/Makefile
 
 all: $(BINARIES)
 

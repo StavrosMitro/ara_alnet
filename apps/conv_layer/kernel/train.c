@@ -87,6 +87,8 @@ static int64_t last_loss_cycles = 0;
 static int64_t last_zero_dinput_cycles = 0;
 static int64_t last_backward_cycles = 0;
 static int64_t last_update_cycles = 0;
+static conv_backward_cycle_breakdown last_conv_backward_breakdown = {0,0,0};
+static int64_t last_conv_backward_total_cycles = 0;
 
 static void zero_f32(float *buf, int n)
 {
@@ -335,11 +337,18 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
 
     t0 = alexnet_cycle_count_local();
     if (net->trainable.conv1) {
-        conv_op_backward_full(&(net->conv1));
+        conv_op_backward_full_profile(&(net->conv1), &last_conv_backward_breakdown);
     } else {
+        last_conv_backward_breakdown.d_input_cycles = 0;
+        last_conv_backward_breakdown.d_bias_cycles = 0;
+        last_conv_backward_breakdown.d_weights_im2col_cycles = 0;
+        last_conv_backward_breakdown.d_weights_cycles = 0;
         conv_op_backward_input_only(&(net->conv1));
     }
     last_backward_cycles = alexnet_cycle_count_local() - t0;
+    last_conv_backward_total_cycles = last_conv_backward_breakdown.d_input_cycles +
+                                     last_conv_backward_breakdown.d_bias_cycles +
+                                     last_conv_backward_breakdown.d_weights_cycles;
 
     unpad_tensor(d_conv1_input_buf, d_conv1_input_pad_buf,
                  net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
@@ -413,6 +422,12 @@ void alexnet_train(alexnet *net, int epochs)
                     prep_cycles, forward_cycles,
                     last_loss_cycles, last_zero_dinput_cycles,
                     last_backward_cycles, last_update_cycles);
+                    printf_("conv backward breakdown: d_input=%ld, d_bias=%ld, d_weights_im2col=%ld, d_weights_total=%ld, total=%ld\n",
+                    last_conv_backward_breakdown.d_input_cycles,
+                    last_conv_backward_breakdown.d_bias_cycles,
+                        last_conv_backward_breakdown.d_weights_im2col_cycles,
+                    last_conv_backward_breakdown.d_weights_cycles,
+                    last_conv_backward_total_cycles);
             printf_("epoch %d step %d/%d loss: %.6f\n", e + 1, b + 1, steps_per_epoch, step_loss);
         }
     }

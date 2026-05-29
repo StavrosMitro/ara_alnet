@@ -1,0 +1,17 @@
+test to see if it compiled 14:36!
+batch size: 4 
+epochs: 100 
+batchsize in setup
+Network pointers use weights.c arrays directly (no parameter buffer copy).
+  conv1: 1
+Total trainable layers: 1/1
+>>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
+padding compare: max_abs_diff=0.000004 idx=2513
+cycles[epoch 1 batch 1/1]: prep=40584999, forward=4726436, loss=1581, zero_d_input=1337, backward=44651545, update=2120
+conv backward breakdown: d_input=3902890, d_bias=3577, d_weights_im2col=1210060, d_weights_total=40744449, total=44650916
+epoch 1 step 1/1 loss: 0.845902
+>>>>>>>>>>>>>>>>>>>> epoch 2 >>>>>>>>>>>>>>>>>>>>>>
+cycles[epoch 2 batch 1/1]: prep=646324, forward=4726436, loss=1581, zero_d_input=1337, backward=44651545, update=2120
+conv backward breakdown: d_input=3902890, d_bias=3577, d_weights_im2col=1210060, d_weights_total=40744449, total=44650916
+epoch 2 step 1/1 loss: 0.844800
+>>>>>>>>>>>>>>>>>>>> epoch 3 >>>>>>>>>>>>>>>>>>>>>>

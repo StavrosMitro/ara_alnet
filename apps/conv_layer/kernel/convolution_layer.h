@@ -13,6 +13,8 @@
 #endif
 #endif
 
+#include <stdint.h>
+
 #define CONV_MAX_IKK  (256 * 3 * 3)
 #define CONV_MAX_OC   256
 #define CONV_MAX_OWOH (32 * 32)
@@ -50,10 +52,18 @@ typedef struct conv_op {
 
 
 
+typedef struct conv_backward_cycle_breakdown {
+    int64_t d_input_cycles;
+    int64_t d_bias_cycles;
+    int64_t d_weights_im2col_cycles;
+    int64_t d_weights_cycles;
+} conv_backward_cycle_breakdown;
+
 void conv_op_forward(conv_op *op);
 void conv_op_forward_im2col(conv_op *op);
 void conv_op_backward(conv_op *op);
 void conv_op_backward_full(conv_op *op);
+void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *cycles);
 void conv_op_backward_input_only(conv_op *op);
 
 inline void calloc_conv_weights(conv_op *op);
