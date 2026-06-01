@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <stddef.h>
 #ifdef SPIKE
 #include "printf.h"
 #elif defined ARA_LINUX
@@ -17,6 +18,234 @@
 #include "matrix.h"
 #include "runtime.h"
 #include "fconv3d.h"
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
+// =========================================================================
+// GATHER-based Vectorized img2col Support
+// =========================================================================
+#define MAX_GATHER_ELEMENTS (CONV_MAX_IKK * CONV_MAX_OWOH)
+
+static uint32_t gather_offsets_buf[MAX_GATHER_ELEMENTS];
+static int total_gather_elements = 0;
+
+static inline void memset_vectorized_zero_f32(float *dst, size_t n_elements) {
+    // 1. Προετοιμασία: Γεμίζουμε 8 Vector Registers (m8) με μηδενικά
+    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
+    asm volatile("vmv.v.i v16, 0"); 
+
+    // 2. Εκτέλεση: Αδειάζουμε τα μηδενικά στη μνήμη με μέγιστο bandwidth
+    while (n_elements > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_elements));
+        asm volatile("vse32.v v16, (%0)" :: "r"(dst));
+        
+        dst += vl;
+        n_elements -= vl;
+    }
+}
+
+static inline void memcpy_vectorized_f32(float *dst, const float *src, size_t n_elements) {
+    while (n_elements > 0) {
+        size_t vl;
+        // Χρησιμοποιούμε m8 για να δεσμεύσουμε 8 Vector Registers μαζί!
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_elements));
+        
+        // Φόρτωση και Αποθήκευση στη μέγιστη ταχύτητα του διαύλου μνήμης
+        asm volatile("vle32.v v16, (%0)" :: "r"(src));
+        asm volatile("vse32.v v16, (%0)" :: "r"(dst));
+        
+        src += vl;
+        dst += vl;
+        n_elements -= vl;
+    }
+}
+
+static void pad_tensor_vectorized(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
+{
+    int out_h = in_h + 2 * pad;
+    int out_w = in_w + 2 * pad;
+    size_t total = (size_t)batch * (size_t)channels * (size_t)out_h * (size_t)out_w;
+    
+    // ---------------------------------------------------------
+    // 1. Vectorized Memset (Μηδενισμός όλου του dst)
+    // ---------------------------------------------------------
+    size_t n_zero = total;
+    float *dst_zero = dst;
+    
+    // Βάζουμε 0 σε όλους τους lanes του τεράστιου καταχωρητή v8 (m8)
+    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
+    asm volatile("vmv.v.i v8, 0"); 
+
+    while (n_zero > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_zero));
+        asm volatile("vse32.v v8, (%0)" :: "r"(dst_zero));
+        dst_zero += vl;
+        n_zero -= vl;
+    }
+
+    // ---------------------------------------------------------
+    // 2. Vectorized Memcpy (Αντιγραφή των πραγματικών pixels)
+    // ---------------------------------------------------------
+    int in_plane = in_h * in_w;
+    int out_plane = out_h * out_w;
+    
+    for (int b = 0; b < batch; b++) {
+        const float *src_b = src + b * channels * in_plane;
+        float *dst_b = dst + b * channels * out_plane;
+        
+        for (int c = 0; c < channels; c++) {
+            const float *src_c = src_b + c * in_plane;
+            float *dst_c = dst_b + c * out_plane + pad * out_w + pad;
+            
+            for (int y = 0; y < in_h; y++) {
+                const float *s_ptr = src_c + y * in_w;
+                float *d_ptr = dst_c + y * out_w;
+                int n_copy = in_w;
+                
+                // Αντιγραφή της γραμμής με Vector Load -> Vector Store
+                while (n_copy > 0) {
+                    size_t vl;
+                    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_copy));
+                    asm volatile("vle32.v v16, (%0)" :: "r"(s_ptr)); // Διάβασε
+                    asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr)); // Γράψε
+                    s_ptr += vl;
+                    d_ptr += vl;
+                    n_copy -= vl;
+                }
+            }
+        }
+    }
+}
+
+static void unpad_tensor_vectorized(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
+{
+    int padded_h = in_h + 2 * pad;
+    int padded_w = in_w + 2 * pad;
+    int out_plane = in_h * in_w;
+    int in_plane = padded_h * padded_w;
+    
+    for (int b = 0; b < batch; b++) {
+        const float *src_b = src + b * channels * in_plane;
+        float *dst_b = dst + b * channels * out_plane;
+        
+        for (int c = 0; c < channels; c++) {
+            const float *src_c = src_b + c * in_plane + pad * padded_w + pad;
+            float *dst_c = dst_b + c * out_plane;
+            
+            for (int y = 0; y < in_h; y++) {
+                const float *s_ptr = src_c + y * padded_w;
+                float *d_ptr = dst_c + y * in_w;
+                int n_copy = in_w;
+                
+                // Αφαίρεση του padding αντιγράφοντας μόνο το in_w με Vectors
+                while (n_copy > 0) {
+                    size_t vl;
+                    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_copy));
+                    asm volatile("vle32.v v16, (%0)" :: "r"(s_ptr)); // Διάβασε
+                    asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr)); // Γράψε
+                    s_ptr += vl;
+                    d_ptr += vl;
+                    n_copy -= vl;
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// GATHER-based Vectorized img2col using Precomputed Byte Offsets
+// =========================================================================
+static void img2col_vectorized(const float *img, float *col)
+{
+    int n = total_gather_elements;
+    const uint32_t *idx_ptr = gather_offsets_buf;
+    const float *src_img = img;
+    float *dst_col = col;
+
+    while (n > 0) {
+        size_t vl;
+        // Ζητάμε το μέγιστο Vector Length, ομαδοποιώντας 8 καταχωρητές (m8)
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+
+        // 1. Φορτώνουμε τα precomputed Byte Offsets
+        asm volatile("vle32.v v8, (%0)" :: "r"(idx_ptr));
+
+        // 2. GATHER: Μαζεύουμε τα ασύνδετα pixels από την εικόνα
+        asm volatile("vluxei32.v v16, (%0), v8" :: "r"(src_img));
+
+        // 3. STORE: Γράφουμε τα pixels απολύτως συνεχόμενα στον πίνακα col
+        asm volatile("vse32.v v16, (%0)" :: "r"(dst_col));
+
+        // Προχωράμε τους δείκτες
+        dst_col += vl;
+        idx_ptr += vl;
+        n -= vl;
+    }
+}
+
+// =========================================================================
+// Precompute img2col Offsets - Called ONCE before training
+// =========================================================================
+void precompute_img2col_offsets_static(const conv_op *op)
+{
+    int iwih = op->in_w * op->in_h;
+    int kk   = op->kernel_size * op->kernel_size; // π.χ. 9
+    int ikk  = op->in_channels * kk;
+    
+    total_gather_elements = op->out_h * op->out_w * ikk;
+
+    printf_("DEBUG: precompute_img2col_offsets_static called\n");
+    printf_("  out_h=%d, out_w=%d, in_channels=%d, kk=%d, ikk=%d\n", 
+            op->out_h, op->out_w, op->in_channels, kk, ikk);
+    printf_("  total_gather_elements=%d, MAX_GATHER_ELEMENTS=%d\n", 
+            total_gather_elements, MAX_GATHER_ELEMENTS);
+
+    // Safety Check
+    if (total_gather_elements > MAX_GATHER_ELEMENTS) {
+        printf_("FATAL ERROR: Gather offsets require %d elements, but MAX_GATHER_ELEMENTS is %d\n", 
+                total_gather_elements, MAX_GATHER_ELEMENTS);
+        exit(1); 
+    }
+
+    // --- Vectorized 3x3 Pattern Precomputation ---
+    uint32_t patch_pattern[9]; // Υποθέτουμε max kernel 3x3
+    int p_idx = 0;
+    for (int j = 0; j < op->kernel_size; j++) {
+        for (int i = 0; i < op->kernel_size; i++) {
+            patch_pattern[p_idx++] = (i + j * op->in_w) * sizeof(float); // Bytes
+        }
+    }
+
+    // Φόρτωση του Pattern μόνιμα σε έναν Vector Register (v8)
+    size_t vl;
+    asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(kk));
+    asm volatile("vle32.v v8, (%0)" :: "r"(patch_pattern));
+
+    uint32_t *out_ptr = gather_offsets_buf;
+
+    // ΣΩΣΤΗ ΣΕΙΡΑ LOOPS ΓΙΑ GEMM LAYOUT: y -> x -> in_channels
+    for (int st_y = 0; st_y < op->out_h * op->stride; st_y += op->stride) {
+        for (int st_x = 0; st_x < op->out_w * op->stride; st_x += op->stride) {
+            for (int in_c = 0; in_c < op->in_channels; in_c++) {
+                
+                // Υπολογισμός της "Άγκυρας" (Base Offset) σε Bytes
+                uint32_t base_offset = (st_x + st_y * op->in_w + in_c * iwih) * sizeof(float);
+
+                // v16 = v8 (pattern) + base_offset
+                asm volatile("vadd.vx v16, v8, %0" :: "r"(base_offset));
+
+                // Αποθήκευση των offsets
+                asm volatile("vse32.v v16, (%0)" :: "r"(out_ptr));
+                
+                out_ptr += kk; 
+            }
+        }
+    }
+}
+
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -45,6 +274,67 @@ static void pad_channels(float *dst, const float *src, int channels, int in_h, i
 static void pack_conv3x3_filter_rot180_dx(const conv_op *op, int ic, float *dst);
 static int conv_can_use_3x3_dx(const conv_op *op);
 static void conv_op_backward_input_3x3_ara(conv_op *op);
+
+// =========================================================================
+// Verification: Compare scalar vs vectorized img2col implementations
+// =========================================================================
+void verify_img2col_implementations(const conv_op *op, const float *test_input)
+{
+    // Use existing scratch buffers (no malloc - bare metal only!)
+    float *col_scalar = conv1_xcol_scratch;
+    float *col_vectorized = conv2_xcol_scratch;
+    
+    printf_("\n========== img2col Implementation Verification ==========\n");
+    printf_("Running both implementations with same test input...\n");
+    
+    // Run scalar implementation
+    img2col(test_input, col_scalar, op);
+    
+    // Run vectorized GATHER implementation
+    img2col_vectorized(test_input, col_vectorized);
+    
+    // Calculate total elements in output
+    int total_elements = op->out_h * op->out_w * op->in_channels * op->kernel_size * op->kernel_size;
+    
+    // Compare outputs element-by-element
+    int diffs = 0;
+    float max_diff = 0.0f;
+    float sum_diff = 0.0f;
+    
+    for (int i = 0; i < total_elements; i++) {
+        float scalar_val = col_scalar[i];
+        float vect_val = col_vectorized[i];
+        float diff = fabsf(scalar_val - vect_val);
+        
+        if (diff > 1e-6f) {
+            diffs++;
+            sum_diff += diff;
+            if (diff > max_diff) max_diff = diff;
+            
+            // Print first 10 differences
+            if (diffs <= 10) {
+                printf_("  Diff at [%d]: scalar=%.6f, vectorized=%.6f, diff=%.6e\n",
+                        i, scalar_val, vect_val, diff);
+            }
+        }
+    }
+    
+    // Print summary
+    if (diffs == 0) {
+        printf_("✓ VERIFICATION PASSED: Both implementations produce identical results!\n");
+        printf_("  Total elements compared: %d\n", total_elements);
+    } else {
+        printf_("✗ VERIFICATION FAILED: Found %d differences\n", diffs);
+        printf_("  Total elements: %d, Differences: %d (%.2f%%)\n", 
+                total_elements, diffs, (100.0f * diffs) / total_elements);
+        printf_("  Max difference: %.6e\n", max_diff);
+        printf_("  Average difference: %.6e\n", sum_diff / diffs);
+        if (diffs > 10) {
+            printf_("  (showing first 10 of %d differences)\n", diffs);
+        }
+    }
+    printf_("==========================================================\n\n");
+}
 
 static void pack_conv3x3_filter(const conv_op *op, int oc, float *dst)
 {
@@ -124,7 +414,7 @@ static void pad_channels(float *dst, const float *src, int channels, int in_h, i
     int out_h = in_h + 2 * pad;
     int out_w = in_w + 2 * pad;
     size_t total = (size_t)channels * (size_t)out_h * (size_t)out_w;
-    memset(dst, 0, total * sizeof(float));
+    memset_vectorized_zero_f32(dst, total);
 
     int in_plane = in_h * in_w;
     int out_plane = out_h * out_w;
@@ -388,12 +678,19 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
     {
         t0 = get_cycle_count();
         float *x_col = conv_forward_xcol_ptr(op, (short)p);
-        img2col(op->input + p * op->in_units, x_col, op);
+        // Use GATHER-based vectorized img2col if offsets precomputed, else fallback
+        if (total_gather_elements > 0) {
+            // printf_("vectorized im2col (gather_elements=%d, layer_id=%d)\n", total_gather_elements, op->layer_id);
+            img2col_vectorized(op->input + p * op->in_units, x_col);
+        } else {
+            printf_("scalar im2col (gather_elements=%d, layer_id=%d)\n", total_gather_elements, op->layer_id);
+            img2col(op->input + p * op->in_units, x_col, op);
+        }
 
         if (cycles)
             cycles->d_weights_im2col_cycles += get_cycle_count() - t0;
 
-        memset(t_d_weights, 0, oc * ikk * sizeof(float));
+        memset_vectorized_zero_f32(t_d_weights, (size_t)oc * (size_t)ikk);
 
         t0 = get_cycle_count();
         matrix_multiply(op->d_output + p * oc * owoh, x_col, t_d_weights, oc, owoh, ikk);
@@ -498,7 +795,7 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
         {
             memcpy(d_out_copy, op->d_output + p * oc * owoh, oc * owoh * sizeof(float));
             matrix_transpose(d_out_copy, oc, owoh);
-            memset(d_x_col, 0, ikk * owoh * sizeof(float));
+            memset_vectorized_zero_f32(d_x_col, (size_t)ikk * (size_t)owoh);
             matrix_multiply(d_out_copy, weights_T, d_x_col, owoh, oc, ikk);
             col2img(d_x_col, op->d_input + p * op->in_units, op);
         }
@@ -534,7 +831,7 @@ void conv_op_backward_input_only(conv_op *op)
     {
         memcpy(d_out_copy, op->d_output + p * oc * owoh, oc * owoh * sizeof(float));
         matrix_transpose(d_out_copy, oc, owoh);
-        memset(d_x_col, 0, ikk * owoh * sizeof(float));
+        memset_vectorized_zero_f32(d_x_col, (size_t)ikk * (size_t)owoh);
         matrix_multiply(d_out_copy, weights_T, d_x_col, owoh, oc, ikk);
         col2img(d_x_col, op->d_input + p * op->in_units, op);
     }
@@ -545,9 +842,9 @@ void conv_op_backward_input_only(conv_op *op)
 void calloc_conv_weights(conv_op *op)
 {
     if (op->weights)
-        memset(op->weights, 0, (size_t)op->out_channels * op->in_channels * op->kernel_size * op->kernel_size * sizeof(float));
+        memset_vectorized_zero_f32(op->weights, (size_t)op->out_channels * op->in_channels * op->kernel_size * op->kernel_size);
     if (op->bias)
-        memset(op->bias, 0, (size_t)op->out_channels * sizeof(float));
+        memset_vectorized_zero_f32(op->bias, (size_t)op->out_channels);
 }
 
 void free_conv_weights(conv_op *op)
@@ -558,9 +855,9 @@ void free_conv_weights(conv_op *op)
 void calloc_conv_dweights(conv_op *op)
 {
     if (op->d_weights)
-        memset(op->d_weights, 0, (size_t)op->out_channels * op->in_channels * op->kernel_size * op->kernel_size * sizeof(float));
+        memset_vectorized_zero_f32(op->d_weights, (size_t)op->out_channels * op->in_channels * op->kernel_size * op->kernel_size);
     if (op->d_bias)
-        memset(op->d_bias, 0, (size_t)op->out_channels * sizeof(float));
+        memset_vectorized_zero_f32(op->d_bias, (size_t)op->out_channels);
 }
 
 void free_conv_dweights(conv_op *op)

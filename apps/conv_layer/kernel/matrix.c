@@ -17,18 +17,15 @@
 #include "printf.h"
 #endif
 
-#define MATRIX_TRANSPOSE_WORKSPACE_ELEMS (FC_MAX_IN_UNITS * FC_MAX_INTERNAL)
+// Increased limits to support larger matrices in backward pass (e.g., M=512, N=4000, K=4000)
+// and avoid fallback to slow scalar implementation
+#define FMATMUL_MAX_M    128
+#define FMATMUL_MAX_N    512
+#define FMATMUL_MAX_K    512
+
+#define MATRIX_TRANSPOSE_WORKSPACE_ELEMS (FMATMUL_MAX_M * FMATMUL_MAX_N)
 
 float shared_memory_pool[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
-
-#if ALEXNET_STATIC_MAX_BATCH > 4
-#define FMATMUL_MAX_M ALEXNET_STATIC_MAX_BATCH
-#else
-#define FMATMUL_MAX_M 4
-#endif
-
-#define FMATMUL_MAX_N FC_MAX_IN_UNITS
-#define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
 // float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
 float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
@@ -77,17 +74,21 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
+    // If M is already perfectly divisible by block size, no padding needed.
+    // Call fmatmul directly without checking dimension limits, allowing
+    // large matrices to be processed without fallback to scalar implementation.
+    if (padded_m == (unsigned long int)M) {
+        fmatmul(c, a, b,
+                (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
+    // Padding is needed: check if dimensions fit in buffers
     if ((unsigned long int)N > FMATMUL_MAX_N ||
         (unsigned long int)K > FMATMUL_MAX_K ||
         padded_m > FMATMUL_MAX_M)
     {
         matrix_multiply_scalar(a, b, c, M, N, K);
-        return;
-    }
-
-    if (padded_m == (unsigned long int)M) {
-        fmatmul(c, a, b,
-                (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
         return;
     }
 
@@ -161,17 +162,20 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
+    // If M is already perfectly divisible by block size, no padding needed.
+    // Call fmatmul_fused directly without checking dimension limits.
+    if (padded_m == (unsigned long int)M) {
+        fmatmul_fused(c, a, b, bias,
+                      (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
+    // Padding is needed: check if dimensions fit in buffers
     if ((unsigned long int)N > FMATMUL_MAX_N ||
         (unsigned long int)K > FMATMUL_MAX_K ||
         padded_m > FMATMUL_MAX_M)
     {
         matrix_multiply_scalar_fused(a, b, bias, c, M, N, K);
-        return;
-    }
-
-    if (padded_m == (unsigned long int)M) {
-        fmatmul_fused(c, a, b, bias,
-                      (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
         return;
     }
 

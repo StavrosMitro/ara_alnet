@@ -16,7 +16,7 @@
 #endif
 
 #ifndef ALEXNET_BATCHSIZE
-#define ALEXNET_BATCHSIZE 4
+#define ALEXNET_BATCHSIZE 2
 #endif
 
 #ifndef ALEXNET_STATIC_MAX_BATCH

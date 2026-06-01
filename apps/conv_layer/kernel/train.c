@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <math.h>
 #include <string.h>
 #include "alexnet.h"
@@ -87,6 +88,7 @@ static int64_t last_loss_cycles = 0;
 static int64_t last_zero_dinput_cycles = 0;
 static int64_t last_backward_cycles = 0;
 static int64_t last_update_cycles = 0;
+static int64_t last_precompute_cycles = 0;
 static conv_backward_cycle_breakdown last_conv_backward_breakdown = {0,0,0};
 static int64_t last_conv_backward_total_cycles = 0;
 
@@ -94,7 +96,21 @@ static void zero_f32(float *buf, int n)
 {
     memset(buf, 0, (size_t)n * sizeof(float));
 }
-
+static inline void memcpy_vectorized_f32(float *dst, const float *src, size_t n_elements) {
+    while (n_elements > 0) {
+        size_t vl;
+        // Χρησιμοποιούμε m8 για να δεσμεύσουμε 8 Vector Registers μαζί!
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_elements));
+        
+        // Φόρτωση και Αποθήκευση στη μέγιστη ταχύτητα του διαύλου μνήμης
+        asm volatile("vle32.v v16, (%0)" :: "r"(src));
+        asm volatile("vse32.v v16, (%0)" :: "r"(dst));
+        
+        src += vl;
+        dst += vl;
+        n_elements -= vl;
+    }
+}
 static void zero_f32_vec(float *buf, int n)
 {
     size_t max_vl;
@@ -111,42 +127,94 @@ static void zero_f32_vec(float *buf, int n)
     }
 }
 
-static void pad_tensor(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
+static void pad_tensor_vectorized(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
 {
     int out_h = in_h + 2 * pad;
     int out_w = in_w + 2 * pad;
     size_t total = (size_t)batch * (size_t)channels * (size_t)out_h * (size_t)out_w;
-    memset(dst, 0, total * sizeof(float));
+    
+    // ---------------------------------------------------------
+    // 1. Vectorized Memset (Μηδενισμός όλου του dst)
+    // ---------------------------------------------------------
+    size_t n_zero = total;
+    float *dst_zero = dst;
+    
+    // Βάζουμε 0 σε όλους τους lanes του τεράστιου καταχωρητή v8 (m8)
+    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
+    asm volatile("vmv.v.i v8, 0"); 
 
+    while (n_zero > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_zero));
+        asm volatile("vse32.v v8, (%0)" :: "r"(dst_zero));
+        dst_zero += vl;
+        n_zero -= vl;
+    }
+
+    // ---------------------------------------------------------
+    // 2. Vectorized Memcpy (Αντιγραφή των πραγματικών pixels)
+    // ---------------------------------------------------------
     int in_plane = in_h * in_w;
     int out_plane = out_h * out_w;
+    
     for (int b = 0; b < batch; b++) {
         const float *src_b = src + b * channels * in_plane;
         float *dst_b = dst + b * channels * out_plane;
+        
         for (int c = 0; c < channels; c++) {
             const float *src_c = src_b + c * in_plane;
             float *dst_c = dst_b + c * out_plane + pad * out_w + pad;
+            
             for (int y = 0; y < in_h; y++) {
-                memcpy(dst_c + y * out_w, src_c + y * in_w, (size_t)in_w * sizeof(float));
+                const float *s_ptr = src_c + y * in_w;
+                float *d_ptr = dst_c + y * out_w;
+                int n_copy = in_w;
+                
+                // Αντιγραφή της γραμμής με Vector Load -> Vector Store
+                while (n_copy > 0) {
+                    size_t vl;
+                    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_copy));
+                    asm volatile("vle32.v v16, (%0)" :: "r"(s_ptr)); // Διάβασε
+                    asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr)); // Γράψε
+                    s_ptr += vl;
+                    d_ptr += vl;
+                    n_copy -= vl;
+                }
             }
         }
     }
 }
 
-static void unpad_tensor(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
+static void unpad_tensor_vectorized(float *dst, const float *src, int batch, int channels, int in_h, int in_w, int pad)
 {
     int padded_h = in_h + 2 * pad;
     int padded_w = in_w + 2 * pad;
     int out_plane = in_h * in_w;
     int in_plane = padded_h * padded_w;
+    
     for (int b = 0; b < batch; b++) {
         const float *src_b = src + b * channels * in_plane;
         float *dst_b = dst + b * channels * out_plane;
+        
         for (int c = 0; c < channels; c++) {
             const float *src_c = src_b + c * in_plane + pad * padded_w + pad;
             float *dst_c = dst_b + c * out_plane;
+            
             for (int y = 0; y < in_h; y++) {
-                memcpy(dst_c + y * in_w, src_c + y * padded_w, (size_t)in_w * sizeof(float));
+                const float *s_ptr = src_c + y * padded_w;
+                float *d_ptr = dst_c + y * in_w;
+                int n_copy = in_w;
+                
+                // Αφαίρεση του padding αντιγράφοντας μόνο το in_w με Vectors
+                while (n_copy > 0) {
+                    size_t vl;
+                    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_copy));
+                    asm volatile("vle32.v v16, (%0)" :: "r"(s_ptr)); // Διάβασε
+                    asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr)); // Γράψε
+                    s_ptr += vl;
+                    d_ptr += vl;
+                    n_copy -= vl;
+                }
             }
         }
     }
@@ -350,8 +418,8 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
                                      last_conv_backward_breakdown.d_bias_cycles +
                                      last_conv_backward_breakdown.d_weights_cycles;
 
-    unpad_tensor(d_conv1_input_buf, d_conv1_input_pad_buf,
-                 net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
+    unpad_tensor_vectorized(d_conv1_input_buf, d_conv1_input_pad_buf,
+                            net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
     net->conv1.d_input = d_conv1_input_buf;
 
     t0 = alexnet_cycle_count_local();
@@ -383,6 +451,31 @@ void alexnet_train(alexnet *net, int epochs)
     if (ALEXNET_MAX_STEPS > 0 && steps_per_epoch > ALEXNET_MAX_STEPS)
         steps_per_epoch = ALEXNET_MAX_STEPS;
 
+    // ================================================================
+    // PRECOMPUTE gather offsets for vectorized img2col (ONE TIME ONLY)
+    // ================================================================
+    int64_t t_precompute = alexnet_cycle_count_local();
+    precompute_img2col_offsets_static(&(net->conv1));
+    last_precompute_cycles = alexnet_cycle_count_local() - t_precompute;
+    printf_("precomputation cycles: %ld\n", last_precompute_cycles);
+    printf_("DEBUG: After precomputation, total_gather_elements should be set\n");
+
+    // ================================================================
+    // VERIFY img2col implementations - run once before training
+    // ================================================================
+    // Load first sample for verification
+    // {
+    //     size_t input_elements = (size_t)net->batchsize * CONV1_IN_UNITS;
+    //     memcpy_vectorized_f32(train_input_buf, test_inputs, input_elements);
+    //     pad_tensor_vectorized(train_input_pad_buf, train_input_buf,
+    //                           net->batchsize, net->conv1.in_channels,
+    //                           net->conv1.in_h, net->conv1.in_w,
+    //                           net->conv1.padding);
+    //     net->conv1.input = train_input_pad_buf;
+    //     verify_img2col_implementations(&(net->conv1), 
+    //                                   train_input_pad_buf + 0 * net->conv1.in_units);
+    // }
+
     ALEXNET_LOG_LAYER("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>> training begin >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     for (int e = 0; e < epochs; e++) {
         printf_(">>>>>>>>>>>>>>>>>>>> epoch %d >>>>>>>>>>>>>>>>>>>>>>\n", e + 1);
@@ -395,18 +488,24 @@ void alexnet_train(alexnet *net, int epochs)
 
             t0 = alexnet_cycle_count_local();
             int sample_offset = (b * net->batchsize) % dataset_count;
-                 memcpy(train_input_buf,
-                     test_inputs + sample_offset * CONV1_IN_UNITS,
-                     (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
-            memcpy(batch_targets,
-                   test_targets + sample_offset * CONV1_OUT_UNITS,
-                   (size_t)net->batchsize * CONV1_OUT_UNITS * sizeof(float));
-                 pad_tensor(train_input_pad_buf, train_input_buf,
-                      net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
-                 if (!compare_once) {
-                  compare_padding_paths(net, train_input_buf, train_input_pad_buf);
-                  compare_once = 1;
-                 }
+            
+            // --- VECTORIZED MEMCPY ΓΙΑ ΤΟ INPUT ---
+            size_t input_elements = (size_t)net->batchsize * CONV1_IN_UNITS;
+            memcpy_vectorized_f32(train_input_buf, 
+                                  test_inputs + sample_offset * CONV1_IN_UNITS, 
+                                  input_elements);
+                                  
+            // --- VECTORIZED MEMCPY ΓΙΑ ΤΑ TARGETS ---
+            size_t target_elements = (size_t)net->batchsize * CONV1_OUT_UNITS;
+            memcpy_vectorized_f32(batch_targets, 
+                                  test_targets + sample_offset * CONV1_OUT_UNITS, 
+                                  target_elements);
+            
+            // --- VECTORIZED PADDING ---
+            pad_tensor_vectorized(train_input_pad_buf, train_input_buf,
+                                  net->batchsize, CONV1_IN_CHANNELS, 
+                                  CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
+                                  
             prep_cycles = alexnet_cycle_count_local() - t0;
 
             t0 = alexnet_cycle_count_local();
@@ -422,16 +521,19 @@ void alexnet_train(alexnet *net, int epochs)
                     prep_cycles, forward_cycles,
                     last_loss_cycles, last_zero_dinput_cycles,
                     last_backward_cycles, last_update_cycles);
-                    printf_("conv backward breakdown: d_input=%ld, d_bias=%ld, d_weights_im2col=%ld, d_weights_total=%ld, total=%ld\n",
+            printf_("conv backward breakdown: d_input=%ld, d_bias=%ld, d_weights_im2col=%ld, d_weights_total=%ld, total=%ld\n",
                     last_conv_backward_breakdown.d_input_cycles,
                     last_conv_backward_breakdown.d_bias_cycles,
-                        last_conv_backward_breakdown.d_weights_im2col_cycles,
+                    last_conv_backward_breakdown.d_weights_im2col_cycles,
                     last_conv_backward_breakdown.d_weights_cycles,
                     last_conv_backward_total_cycles);
             printf_("epoch %d step %d/%d loss: %.6f\n", e + 1, b + 1, steps_per_epoch, step_loss);
         }
     }
     ALEXNET_LOG_LAYER(">>>>>>>>>>>>>>>>>>>>>>>>>>>> training end >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
+    printf_("===== Training Summary =====\n");
+    printf_("precomputation cycles (one-time): %ld\n", last_precompute_cycles);
+    printf_("============================\n\n");
 }
 
 void alexnet_test(alexnet *net)
@@ -446,13 +548,19 @@ void alexnet_test(alexnet *net)
         net->conv1.in_w = CONV1_PADDED_W;
         net->conv1.in_h = CONV1_PADDED_H;
         net->conv1.in_units = CONV1_PADDED_IN_UNITS;
-        memcpy(train_input_buf,
+        
+        // --- VECTORIZED MEMCPY FOR INPUT ---
+        memcpy_vectorized_f32(train_input_buf,
             test_inputs,
-            (size_t)net->batchsize * CONV1_IN_UNITS * sizeof(float));
-    memcpy(train_targets_buf,
+            (size_t)net->batchsize * CONV1_IN_UNITS);
+            
+        // --- VECTORIZED MEMCPY FOR TARGETS ---
+        memcpy_vectorized_f32(train_targets_buf,
            test_targets,
-           (size_t)net->batchsize * CONV1_OUT_UNITS * sizeof(float));
-        pad_tensor(train_input_pad_buf, train_input_buf,
+           (size_t)net->batchsize * CONV1_OUT_UNITS);
+           
+        // --- VECTORIZED PADDING ---
+        pad_tensor_vectorized(train_input_pad_buf, train_input_buf,
              net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
 
     forward_alexnet(net);

@@ -9,7 +9,7 @@
 #ifdef ALEXNET_BATCHSIZE
 #define ALEXNET_STATIC_MAX_BATCH ALEXNET_BATCHSIZE
 #else
-#define ALEXNET_STATIC_MAX_BATCH 4
+#define ALEXNET_STATIC_MAX_BATCH 2
 #endif
 #endif
 
@@ -65,6 +65,12 @@ void conv_op_backward(conv_op *op);
 void conv_op_backward_full(conv_op *op);
 void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *cycles);
 void conv_op_backward_input_only(conv_op *op);
+
+// Precompute gather offsets for vectorized img2col
+void precompute_img2col_offsets_static(const conv_op *op);
+
+// Verify scalar vs vectorized img2col implementations
+void verify_img2col_implementations(const conv_op *op, const float *test_input);
 
 inline void calloc_conv_weights(conv_op *op);
 inline void free_conv_weights(conv_op *op);

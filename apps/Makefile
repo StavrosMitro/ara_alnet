@@ -114,8 +114,8 @@ fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllv
 
 # conv_layer profile controls (mirrors fc_layer semantics)
 CONV_LAYER_MODE ?= train
-CONV_LAYER_BATCHSIZE ?= 4
-CONV_LAYER_EPOCHS ?= 100
+CONV_LAYER_BATCHSIZE ?= 2
+CONV_LAYER_EPOCHS ?= 1
 CONV_LAYER_INFER_IDX ?= -1
 CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
 
