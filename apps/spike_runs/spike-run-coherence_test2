@@ -1,0 +1,6 @@
+--- L1 Invalidation Polling Test ---
+CVA6 L1 Cache warmed up: payload=0.000000, flag=0.000000
+
+[PASS] Απίστευτο! Το Loop έσπασε μετά από 0 επαναλήψεις.
+       Το Invalidation Signal από τον Ara δούλεψε τέλεια!
+       Νέο payload διαβασμένο από τη RAM: 99.000000

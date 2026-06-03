@@ -46,6 +46,8 @@ dpi_library    ?= work-dpi
 veril_library  ?= $(buildpath)/verilator
 # verilator path
 veril_path     ?= $(abspath $(INSTALL_DIR)/verilator/bin)
+# verilator thread count
+verilator_threads ?= 8
 # verilator top-level
 veril_top      ?= ara_tb_verilator
 # Top level module to compile
@@ -205,6 +207,7 @@ $(veril_library)/V$(veril_top): $(config_file) Makefile ../Bender.yml $(shell fi
   -Wno-WIDTHCONCAT                                                              \
   -Wno-ENUMVALUE                                                                \
   -Wno-COMBDLY                                                                  \
+	--threads $(verilator_threads)                                                \
   tb/verilator/waiver.vlt                                                       \
   --Mdir $(veril_library)                                                       \
   -Itb/dpi                                                                      \
