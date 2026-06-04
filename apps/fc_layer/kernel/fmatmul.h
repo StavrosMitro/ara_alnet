@@ -22,92 +22,92 @@
 
 #include <stdint.h>
 
-void fmatmul(float *c, const float *a, const float *b, unsigned long int m,
+void fmatmul(float *c, const _Float16 *a, const _Float16 *b, unsigned long int m,
              unsigned long int n, unsigned long int p);
 
-void fmatmul_fused(float *c, const float *a, const float *b,
+void fmatmul_fused(float *c, const _Float16 *a, const _Float16 *b,
                    const float *bias, unsigned long int m,
                    unsigned long int n, unsigned long int p);
 
-void fmatmul_nt(float *c, const float *a, const float *b, unsigned long int m,
+void fmatmul_nt(float *c, const _Float16 *a, const _Float16 *b, unsigned long int m,
                 unsigned long int n, unsigned long int p);
-void fmatmul_tn(float *c, const float *a, const float *b, unsigned long int m,
+void fmatmul_tn(float *c, const _Float16 *a, const _Float16 *b, unsigned long int m,
                 unsigned long int n, unsigned long int p);
 
-void fmatmul_4x4(float *c, const float *a, const float *b,
+void fmatmul_4x4(float *c, const _Float16 *a, const _Float16 *b,
                  unsigned long int m, unsigned long int n, unsigned long int p);
-void fmatmul_vec_4x4_slice_init();
-void fmatmul_vec_4x4_slice_load_bias(const float *bias_slice);
-void fmatmul_vec_4x4_slice_init_fused(const float *bias_slice);
-void fmatmul_vec_4x4(float *c, const float *a, const float *b,
-                     unsigned long int n, unsigned long int p);
+void fmatmul_vec_4x4_slice_init(unsigned long int vl);
+void fmatmul_vec_4x4_slice_load_bias(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_4x4_slice_init_fused(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_4x4(float *c, const _Float16 *a, const _Float16 *b,
+                     unsigned long int n, unsigned long int p, unsigned long int vl);
 
-void fmatmul_4x4_nt(float *c, const float *a, const float *b,
+void fmatmul_4x4_nt(float *c, const _Float16 *a, const _Float16 *b,
                     unsigned long int m, unsigned long int n,
                     unsigned long int p);
-void fmatmul_vec_4x4_nt(float *c, const float *a, const float *b,
-                        unsigned long int n, unsigned long int p);
-void fmatmul_vec_4x4_tn(float *c, const float *a, const float *b,
+void fmatmul_vec_4x4_nt(float *c, const _Float16 *a, const _Float16 *b,
+                        unsigned long int n, unsigned long int p, unsigned long int vl);
+void fmatmul_vec_4x4_tn(float *c, const _Float16 *a, const _Float16 *b,
                         unsigned long int n, unsigned long int p,
-                        unsigned long int lda);
-void fmatmul_4x4_tn(float *c, const float *a, const float *b,
+                        unsigned long int lda, unsigned long int vl);
+void fmatmul_4x4_tn(float *c, const _Float16 *a, const _Float16 *b,
                     unsigned long int m, unsigned long int n,
                     unsigned long int p);
 
-void fmatmul_4x4_deferred(float *c, const float *a, const float *b,
+void fmatmul_4x4_deferred(float *c, const _Float16 *a, const _Float16 *b,
                           unsigned long int m, unsigned long int n,
                           unsigned long int p);
 
-void fmatmul_4x4_fused(float *c, const float *a, const float *b,
+void fmatmul_4x4_fused(float *c, const _Float16 *a, const _Float16 *b,
                        const float *bias, unsigned long int m,
                        unsigned long int n, unsigned long int p);
 
-void fmatmul_8x8(float *c, const float *a, const float *b,
+void fmatmul_8x8(float *c, const _Float16 *a, const _Float16 *b,
                  unsigned long int m, unsigned long int n, unsigned long int p);
-void fmatmul_vec_8x8_slice_init();
-void fmatmul_vec_8x8_slice_load_bias(const float *bias_slice);
-void fmatmul_vec_8x8_slice_init_fused(const float *bias_slice);
-void fmatmul_vec_8x8(float *c, const float *a, const float *b,
-                     unsigned long int n, unsigned long int p);
+void fmatmul_vec_8x8_slice_init(unsigned long int vl);
+void fmatmul_vec_8x8_slice_load_bias(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_8x8_slice_init_fused(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_8x8(float *c, const _Float16 *a, const _Float16 *b,
+                     unsigned long int n, unsigned long int p, unsigned long int vl);
 
-void fmatmul_8x8_nt(float *c, const float *a, const float *b,
+void fmatmul_8x8_nt(float *c, const _Float16 *a, const _Float16 *b,
                     unsigned long int m, unsigned long int n,
                     unsigned long int p);
-void fmatmul_vec_8x8_nt(float *c, const float *a, const float *b,
-                        unsigned long int n, unsigned long int p);
-void fmatmul_8x8_tn(float *c, const float *a, const float *b,
+void fmatmul_vec_8x8_nt(float *c, const _Float16 *a, const _Float16 *b,
+                        unsigned long int n, unsigned long int p, unsigned long int vl);
+void fmatmul_8x8_tn(float *c, const _Float16 *a, const _Float16 *b,
                     unsigned long int m, unsigned long int n,
                     unsigned long int p);
-void fmatmul_vec_8x8_tn(float *c, const float *a, const float *b,
+void fmatmul_vec_8x8_tn(float *c, const _Float16 *a, const _Float16 *b,
                         unsigned long int n, unsigned long int p,
-                        unsigned long int lda);
+                        unsigned long int lda, unsigned long int vl);
 
-void fmatmul_8x8_fused(float *c, const float *a, const float *b,
+void fmatmul_8x8_fused(float *c, const _Float16 *a, const _Float16 *b,
                        const float *bias, unsigned long int m,
                        unsigned long int n, unsigned long int p);
 
-void fmatmul_16x16(float *c, const float *a, const float *b,
+void fmatmul_16x16(float *c, const _Float16 *a, const _Float16 *b,
                    unsigned long int m, unsigned long int n,
                    unsigned long int p);
-void fmatmul_vec_16x16_slice_init();
-void fmatmul_vec_16x16_slice_load_bias(const float *bias_slice);
-void fmatmul_vec_16x16_slice_init_fused(const float *bias_slice);
-void fmatmul_vec_16x16(float *c, const float *a, const float *b,
-                       unsigned long int n, unsigned long int p);
+void fmatmul_vec_16x16_slice_init(unsigned long int vl);
+void fmatmul_vec_16x16_slice_load_bias(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_16x16_slice_init_fused(const float *bias_slice, unsigned long int vl);
+void fmatmul_vec_16x16(float *c, const _Float16 *a, const _Float16 *b,
+                       unsigned long int n, unsigned long int p, unsigned long int vl);
 
-void fmatmul_16x16_nt(float *c, const float *a, const float *b,
+void fmatmul_16x16_nt(float *c, const _Float16 *a, const _Float16 *b,
                       unsigned long int m, unsigned long int n,
                       unsigned long int p);
-void fmatmul_vec_16x16_nt(float *c, const float *a, const float *b,
-                          unsigned long int n, unsigned long int p);
-void fmatmul_16x16_tn(float *c, const float *a, const float *b,
+void fmatmul_vec_16x16_nt(float *c, const _Float16 *a, const _Float16 *b,
+                          unsigned long int n, unsigned long int p, unsigned long int vl);
+void fmatmul_16x16_tn(float *c, const _Float16 *a, const _Float16 *b,
                       unsigned long int m, unsigned long int n,
                       unsigned long int p);
-void fmatmul_vec_16x16_tn(float *c, const float *a, const float *b,
+void fmatmul_vec_16x16_tn(float *c, const _Float16 *a, const _Float16 *b,
                           unsigned long int n, unsigned long int p,
-                          unsigned long int lda);
+                          unsigned long int lda, unsigned long int vl);
 
-void fmatmul_16x16_fused(float *c, const float *a, const float *b,
+void fmatmul_16x16_fused(float *c, const _Float16 *a, const _Float16 *b,
                          const float *bias, unsigned long int m,
                          unsigned long int n, unsigned long int p);
 

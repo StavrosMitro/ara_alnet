@@ -129,11 +129,11 @@ static float mse_targets_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
 // Shared ping-pong buffers for inter-layer gradient propagation.
 static float d_grad_ping_0[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
 
-static float train_input_buf[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
+static _Float16 train_input_buf[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
 static int train_batch_Y_buf[ALEXNET_STATIC_MAX_BATCH];
 static int train_preds_buf[ALEXNET_STATIC_MAX_BATCH];
 
-static float test_input_buf[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
+static _Float16 test_input_buf[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
 static int test_batch_Y_buf[ALEXNET_STATIC_MAX_BATCH];
 static int test_preds_buf[ALEXNET_STATIC_MAX_BATCH];
 
@@ -245,25 +245,14 @@ static inline void CLIP(float *x, float down, float up)
     *x = MIN(up, MAX(down, *x));
 }
 
-static void momentum_sgd(float *w, float *v_w, float *d_w, int units)
+/* ---- Scalar SGD: FP32 weights (used for biases) ---- */
+static void momentum_sgd_f32(float *w, float *v_w, float *d_w, int units)
 {
-    /**
-     * momentum stochastic gradient descent
-     * 
-     * Input:
-     *      w   [units]
-     *      v_w [units]
-     *      d_w [units]
-     * Output:
-     *      w   [units]
-     *      v_w [units]
-     * */     
-    static int momentum_debug_once = 0;
-    if (!momentum_debug_once) {
-        printf_("momentum_sgd args: w=%p v=%p d=%p units=%d\n", w, v_w, d_w, units);
-        momentum_debug_once = 1;
+    static int debug_once_f32 = 0;
+    if (!debug_once_f32) {
+        printf_("momentum_sgd_f32: w=%p v=%p d=%p units=%d\n", w, v_w, d_w, units);
+        debug_once_f32 = 1;
     }
-
     for (int i = 0; i < units; i++)
     {
 #if ALEXNET_USE_MOMENTUM
@@ -272,12 +261,34 @@ static void momentum_sgd(float *w, float *v_w, float *d_w, int units)
         w[i] = w[i] + v_w[i];
 #else
         (void)v_w;
-        w[i] = w[i] - LEARNING_RATE * d_w[i]; //238 in editor
+        w[i] = w[i] - LEARNING_RATE * d_w[i];
 #endif
     }
 }
 
-static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
+/* ---- Scalar SGD: _Float16 weights ---- */
+static void momentum_sgd_f16(_Float16 *w, float *v_w, float *d_w, int units)
+{
+    static int debug_once_f16 = 0;
+    if (!debug_once_f16) {
+        printf_("momentum_sgd_f16: w=%p v=%p d=%p units=%d\n", w, v_w, d_w, units);
+        debug_once_f16 = 1;
+    }
+    for (int i = 0; i < units; i++)
+    {
+#if ALEXNET_USE_MOMENTUM
+        v_w[i] = 0.9f * v_w[i] - LEARNING_RATE * d_w[i];
+        CLIP(v_w + i, -1.0f, 1.0f);
+        w[i] = (_Float16)((float)w[i] + v_w[i]);
+#else
+        (void)v_w;
+        w[i] = (_Float16)((float)w[i] - LEARNING_RATE * d_w[i]);
+#endif
+    }
+}
+
+/* ---- Vector SGD: FP32 weights (used for biases) ---- */
+static void momentum_sgd_vec_f32(float *w, float *v_w, const float *d_w, int units)
 {
     float lr = LEARNING_RATE;
     int n = units;
@@ -289,53 +300,101 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 
     while (n > 0) {
         size_t vl;
-        
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
 
-        // v8: Velocity (v_w), v16: Gradients (d_w), v24: Weights (w)
         asm volatile("vle32.v v8,  (%0)" :: "r"(v_w));
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
         asm volatile("vle32.v v24, (%0)" :: "r"(w));
 
-        // 2. v_w = v_w * 0.9f
         asm volatile("vfmul.vf v8, v8, %0" :: "f"(momentum));
-
-        // 3. v_w = v_w - LR * d_w
-        // vfnmsac = Vector Floating-point Negative Multiply-Subtract Accumulate
-        // vd = -(rs1 * vs2) + vd
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
-
-        // 4. CLIP(v_w, -1.0f, 1.0f)
         asm volatile("vfmax.vf v8, v8, %0" :: "f"(clip_min));
         asm volatile("vfmin.vf v8, v8, %0" :: "f"(clip_max));
-
         asm volatile("vfadd.vv v24, v24, v8");
-
         asm volatile("vse32.v v8,  (%0)" :: "r"(v_w));
         asm volatile("vse32.v v24, (%0)" :: "r"(w));
 
-        w += vl;
-        v_w += vl;
-        d_w += vl;
-        n -= vl;
+        w += vl; v_w += vl; d_w += vl; n -= vl;
     }
 #else
     (void)v_w;
     while (n > 0) {
         size_t vl;
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
-
         asm volatile("vle32.v v8,  (%0)" :: "r"(w));
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
-
-        // w = w - LR * d_w (Με χρήση της εντολής Negative MAC)
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
-
         asm volatile("vse32.v v8,  (%0)" :: "r"(w));
+        w += vl; d_w += vl; n -= vl;
+    }
+#endif
+}
 
-        w += vl;
-        d_w += vl;
-        n -= vl;
+/* ---- Vector SGD: _Float16 weights (used for fc weights) ----
+ *
+ * Register map for widening MAC pattern (LMUL constraint):
+ *   e16, m4  → v20-v23 : FP16 weight source / FP16 weight destination
+ *   e32, m8  → v24-v31 : FP32 widened weights (vfwcvt dest, vfncvt src)
+ *   e32, m8  →  v8-v15 : FP32 velocity
+ *   e32, m8  → v16-v23 : FP32 gradients (v20-v23 overlap is safe: FP16
+ *                          source already consumed by vfwcvt before load)
+ */
+static void momentum_sgd_vec_f16(_Float16 *w, float *v_w, const float *d_w, int units)
+{
+    float lr = LEARNING_RATE;
+    int n = units;
+
+#if ALEXNET_USE_MOMENTUM
+    float momentum = 0.9f;
+    float clip_min = -1.0f;
+    float clip_max = 1.0f;
+
+    while (n > 0) {
+        size_t vl;
+
+        /* Step 1-3: load FP16 weights and widen to FP32 */
+        asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle16.v v20, (%0)" :: "r"(w));
+        asm volatile("vfwcvt.f.f.v v24, v20");   /* v20-v23 (FP16) → v24-v31 (FP32) */
+
+        /* Step 4-5: switch to FP32 and load velocity + gradients */
+        asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(vl));
+        asm volatile("vle32.v v8,  (%0)" :: "r"(v_w));   /* velocity  v8-v15  */
+        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));   /* gradients v16-v23 */
+
+        /* Step 6: FP32 momentum SGD math */
+        asm volatile("vfmul.vf  v8, v8, %0"   :: "f"(momentum));  /* v = 0.9*v          */
+        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));        /* v = v - lr*grad    */
+        asm volatile("vfmax.vf  v8, v8, %0"   :: "f"(clip_min));  /* clip low           */
+        asm volatile("vfmin.vf  v8, v8, %0"   :: "f"(clip_max));  /* clip high          */
+        asm volatile("vfadd.vv  v24, v24, v8");                    /* w_fp32 = w + v     */
+        asm volatile("vse32.v   v8,  (%0)" :: "r"(v_w));          /* store velocity     */
+
+        /* Step 7-9: narrow FP32 result back to FP16 and store */
+        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
+        asm volatile("vfncvt.f.f.w v20, v24");   /* v24-v31 (FP32) → v20-v23 (FP16) */
+        asm volatile("vse16.v v20, (%0)" :: "r"(w));
+
+        w += vl; v_w += vl; d_w += vl; n -= vl;
+    }
+#else
+    (void)v_w;
+    while (n > 0) {
+        size_t vl;
+
+        asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle16.v v20, (%0)" :: "r"(w));
+        asm volatile("vfwcvt.f.f.v v24, v20");
+
+        asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(vl));
+        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
+        asm volatile("vfnmsac.vf v24, %0, v16" :: "f"(lr));  /* w = w - lr*grad */
+
+        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
+        asm volatile("vfncvt.f.f.w v20, v24");
+        asm volatile("vse16.v v20, (%0)" :: "r"(w));
+
+        w += vl; d_w += vl; n -= vl;
     }
 #endif
 }
@@ -345,16 +404,16 @@ static void gradient_descent_a(void *argv)
 {
     alexnet *net = (alexnet *)argv;
     if (net->trainable.fc1)
-        momentum_sgd_vec(fc1_weights, v_fc1_weights, d_fc1_weights,
-                     FC_INPUT_UNITS * FC_OUTPUT_UNITS);
+        momentum_sgd_vec_f16(fc1_weights, v_fc1_weights, d_fc1_weights,
+                             FC_INPUT_UNITS * FC_OUTPUT_UNITS);
 }
 
 static void gradient_descent_d(void *argv)
 {
     alexnet *net = (alexnet *)argv;
     if (net->trainable.fc1)
-        momentum_sgd_vec(fc1_bias, v_fc1_bias, d_fc1_bias,
-                     FC_OUTPUT_UNITS);
+        momentum_sgd_vec_f32(fc1_bias, v_fc1_bias, d_fc1_bias,
+                             FC_OUTPUT_UNITS);
 }
 
 static void gradient_descent(alexnet *net)
@@ -456,7 +515,7 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
     // reduction
     
 
-    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");   // set vl = VLMAX
+    asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(max_vl));   // set vl = VLMAX
     asm volatile("vmv.v.i v0, 0");                         // zero entire v0..v7 group
     asm volatile("vfredsum.vs v0, v8, v0");               // sum all elements of v8..v15 into v0[0]
     float sum_squares;
@@ -574,9 +633,12 @@ void alexnet_train(alexnet *net, int epochs)
             //                net->conv1.in_w, net->conv1.in_h, net->conv1.in_channels, net->fc3.out_units);
             t0 = alexnet_cycle_count_local();
             int sample_offset = (b * net->batchsize) % dataset_count;
-            memcpy(net->input,
-                     test_inputs + sample_offset * FC_INPUT_UNITS,
-                     (size_t)net->batchsize * FC_INPUT_UNITS * sizeof(float));
+            {
+                const int _n = net->batchsize * FC_INPUT_UNITS;
+                const float *_src = test_inputs + sample_offset * FC_INPUT_UNITS;
+                for (int _i = 0; _i < _n; _i++)
+                    net->input[_i] = (_Float16)_src[_i];
+            }
 
         #if defined(SET_CEL)
             for (int i = 0; i < net->batchsize; i++)
@@ -650,8 +712,8 @@ void alexnet_test(alexnet *net)
     printf_(">>>>>>>>>>>>>>>>>>>>>>>>>> start test pass >>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n");
 
     // allocate a fresh input buffer for the test pass
-    float *test_input = test_input_buf;
-    float *saved_input = net->input;
+    _Float16 *test_input = test_input_buf;
+    _Float16 *saved_input = net->input;
     net->input = test_input;
 
     int total_correct = 0;
@@ -660,9 +722,12 @@ void alexnet_test(alexnet *net)
     for (int b = 0; b < steps; b++)
     {
         int sample_offset = (b * net->batchsize) % FC_TOTAL_SAMPLES;
-        memcpy(net->input,
-               test_inputs + sample_offset * FC_INPUT_UNITS,
-               (size_t)net->batchsize * FC_INPUT_UNITS * sizeof(float));
+        {
+            const int _n = net->batchsize * FC_INPUT_UNITS;
+            const float *_src = test_inputs + sample_offset * FC_INPUT_UNITS;
+            for (int _i = 0; _i < _n; _i++)
+                net->input[_i] = (_Float16)_src[_i];
+        }
 #if defined(SET_CEL)
         for (int i = 0; i < net->batchsize; i++)
             batch_Y[i] = test_labels[sample_offset + i];

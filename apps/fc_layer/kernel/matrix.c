@@ -35,13 +35,13 @@ float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 static float fmatmul_nt_loop_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 static float fmatmul_nt_out_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
-static void matrix_multiply_scalar(const float *a, const float *b, float *c,
+static void matrix_multiply_scalar(const _Float16 *a, const _Float16 *b, float *c,
                                    const int M, const int N, const int K);
-static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
+static void matrix_multiply_scalar_nt(const _Float16 *a, const _Float16 *b, float *c,
                                       const int M, const int N, const int K);
-static void matrix_multiply_scalar_tn(const float *a, const float *b, float *c,
+static void matrix_multiply_scalar_tn(const _Float16 *a, const _Float16 *b, float *c,
                                       const int M, const int N, const int K);
-static void matrix_multiply_scalar_fused(const float *a, const float *b,
+static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
                                          const float *bias, float *c,
                                          const int M, const int N,
                                          const int K);
@@ -60,11 +60,11 @@ static inline unsigned long int fmatmul_row_block(unsigned long int m)
 }
 
 
-void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K)
+void matrix_multiply(const _Float16 *a, const _Float16 *b, float *c, const int M, const int N, const int K)
 {
     /**
      * matrix multiply, c = a * b
-     * 
+     *
      * Input:
      * a    [M,N]
      * b    [N,K]
@@ -73,7 +73,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
      * */
     if (M <= 0 || N <= 0 || K <= 0)
         return;
-    float *fmatmul_a_scratch = shared_memory_pool;
+    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
@@ -96,27 +96,27 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     const size_t mk = (size_t)M * (size_t)K;
 
     size_t remaining_mn = mn;
-    const float *src_mn = a;
-    float *dst_mn = fmatmul_a_scratch;
+    const _Float16 *src_mn = a;
+    _Float16 *dst_mn = fmatmul_a_scratch;
     while (remaining_mn > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
-        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
-        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
         src_mn += vl;
         dst_mn += vl;
         remaining_mn -= vl;
     }
 
     size_t remaining = pnk - mn;
-    float *dst = fmatmul_a_scratch + mn;
+    _Float16 *dst = fmatmul_a_scratch + mn;
     while (remaining > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
         asm volatile("vmv.v.x v0, zero");
-        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst) : "memory");
         dst += vl;
         remaining -= vl;
     }
@@ -141,7 +141,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     }
 }
 
-void matrix_multiply_fused(const float *a, const float *b, const float *bias,
+void matrix_multiply_fused(const _Float16 *a, const _Float16 *b, const float *bias,
                            float *c, const int M, const int N, const int K)
 {
     /**
@@ -157,7 +157,7 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     if (M <= 0 || N <= 0 || K <= 0)
         return;
 
-    float *fmatmul_a_scratch = shared_memory_pool;
+    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
@@ -180,27 +180,27 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     const size_t mk = (size_t)M * (size_t)K;
 
     size_t remaining_mn = mn;
-    const float *src_mn = a;
-    float *dst_mn = fmatmul_a_scratch;
+    const _Float16 *src_mn = a;
+    _Float16 *dst_mn = fmatmul_a_scratch;
     while (remaining_mn > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
-        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
-        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
         src_mn += vl;
         dst_mn += vl;
         remaining_mn -= vl;
     }
 
     size_t remaining = pnk - mn;
-    float *dst = fmatmul_a_scratch + mn;
+    _Float16 *dst = fmatmul_a_scratch + mn;
     while (remaining > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
         asm volatile("vmv.v.x v0, zero");
-        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst) : "memory");
         dst += vl;
         remaining -= vl;
     }
@@ -223,7 +223,7 @@ void matrix_multiply_fused(const float *a, const float *b, const float *bias,
     }
 }
 
-void matrix_multiply_nt(const float *a, const float *b, float *c,
+void matrix_multiply_nt(const _Float16 *a, const _Float16 *b, float *c,
                         const int M, const int N, const int K)
 {
     /**
@@ -238,7 +238,7 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     if (M <= 0 || N <= 0 || K <= 0)
         return;
 
-    float *fmatmul_a_scratch = shared_memory_pool;
+    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
@@ -259,27 +259,27 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
                    (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
     } else {
         size_t remaining_mn = mn;
-        const float *src_mn = a;
-        float *dst_mn = fmatmul_a_scratch;
+        const _Float16 *src_mn = a;
+        _Float16 *dst_mn = fmatmul_a_scratch;
         while (remaining_mn > 0)
         {
             size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
-            asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+            asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+            asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
+            asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
             src_mn += vl;
             dst_mn += vl;
             remaining_mn -= vl;
         }
 
         size_t remaining = pnk - mn;
-        float *dst = fmatmul_a_scratch + mn;
+        _Float16 *dst = fmatmul_a_scratch + mn;
         while (remaining > 0)
         {
             size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+            asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
             asm volatile("vmv.v.x v0, zero");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+            asm volatile("vse16.v v0, (%0);" : : "r"(dst) : "memory");
             dst += vl;
             remaining -= vl;
         }
@@ -305,7 +305,7 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     }
 }
 
-void matrix_multiply_tn(const float *a, const float *b, float *c,
+void matrix_multiply_tn(const _Float16 *a, const _Float16 *b, float *c,
                         const int M, const int N, const int K)
 {
     /**
@@ -334,19 +334,19 @@ void matrix_multiply_tn(const float *a, const float *b, float *c,
         return;
     }
 
-    float *a_pad = shared_memory_pool;
+    _Float16 *a_pad = (_Float16 *)shared_memory_pool;
     for (int m = 0; m < M; m++)
     {
-        const float *src_row = a + (size_t)m * (size_t)N;
-        float *dst_row = a_pad + (size_t)m * (size_t)padded_n;
+        const _Float16 *src_row = a + (size_t)m * (size_t)N;
+        _Float16 *dst_row = a_pad + (size_t)m * (size_t)padded_n;
 
         size_t remaining_row = (size_t)N;
         while (remaining_row > 0)
         {
             size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_row));
-            asm volatile("vle32.v v0, (%0);" : : "r"(src_row) : "memory");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst_row) : "memory");
+            asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_row));
+            asm volatile("vle16.v v0, (%0);" : : "r"(src_row) : "memory");
+            asm volatile("vse16.v v0, (%0);" : : "r"(dst_row) : "memory");
             src_row += vl;
             dst_row += vl;
             remaining_row -= vl;
@@ -356,9 +356,9 @@ void matrix_multiply_tn(const float *a, const float *b, float *c,
         while (remaining_pad > 0)
         {
             size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_pad));
+            asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_pad));
             asm volatile("vmv.v.x v0, zero");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst_row) : "memory");
+            asm volatile("vse16.v v0, (%0);" : : "r"(dst_row) : "memory");
             dst_row += vl;
             remaining_pad -= vl;
         }
@@ -368,7 +368,7 @@ void matrix_multiply_tn(const float *a, const float *b, float *c,
                (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
 }
 
-int matrix_multiply_tn_verify(const float *a, const float *b,
+int matrix_multiply_tn_verify(const _Float16 *a, const _Float16 *b,
                               const int M, const int N, const int K,
                               const float eps)
 {
@@ -418,58 +418,90 @@ int matrix_multiply_tn_verify(const float *a, const float *b,
 
     return (mismatch_count == 0) ? 1 : 0;
 }
-
-void matrix_multiply_nt_deferred(const float *a, const float *b, float *c,
+void matrix_multiply_nt_deferred(const _Float16 *a, const _Float16 *b, float *c,
                                  const int M, const int N, const int K)
 {
-    /**
-     * matrix multiply, c += a * b^T (deferred reduction, 4x4 only)
-     *
-     * Input:
-     * a    [M,N]
-     * b    [K,N]
-     * Output:
-     * c    [M,K]
-     * */
-    if (M <= 0 || N <= 0 || K <= 0)
-        return;
+    if (M <= 0 || N <= 0 || K <= 0) return;
 
     if (((unsigned long int)K % 4) != 0) {
         matrix_multiply_nt(a, b, c, M, N, K);
         return;
     }
 
-    float *fmatmul_a_scratch = shared_memory_pool;
+    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
     unsigned long int padded_m = (((unsigned long int)M + 3) / 4) * 4;
-
-    // if ((unsigned long int)N > FMATMUL_MAX_N ||
-    //     (unsigned long int)K > FMATMUL_MAX_K ||
-    //     padded_m > FMATMUL_MAX_M)
-    // {
-    //     matrix_multiply_nt(a, b, c, M, N, K);
-    //     return;
-    // }
 
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;
-    const size_t mk = (size_t)M * (size_t)K;
     const size_t mk_pad = (size_t)padded_m * (size_t)K;
 
-    for (size_t idx = 0; idx < mn; idx++)
-        fmatmul_a_scratch[idx] = a[idx];
-    for (size_t idx = mn; idx < pnk; idx++)
-        fmatmul_a_scratch[idx] = 0.0f;
-    for (size_t idx = 0; idx < mk_pad; idx++)
-        fmatmul_c_scratch[idx] = 0.0f;
+    // 1. Vectorized Copy A -> scratch (m8)
+    size_t rem = mn;
+    const _Float16 *src = a;
+    _Float16 *dst = fmatmul_a_scratch;
+    while (rem > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(rem));
+        asm volatile("vle16.v v8, (%0)" :: "r"(src));
+        asm volatile("vse16.v v8, (%0)" :: "r"(dst));
+        src += vl; dst += vl;
+        rem -= vl;
+    }
 
+    // 2. Vectorized Zero Padding (a_scratch)
+    rem = pnk - mn;
+    dst = fmatmul_a_scratch + mn;
+    while (rem > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(rem));
+        asm volatile("vmv.v.i v8, 0");
+        asm volatile("vse16.v v8, (%0)" :: "r"(dst));
+        dst += vl;
+        rem -= vl;
+    }
+
+    // 3. Vectorized Zeroing c_scratch (FP32)
+    rem = mk_pad;
+    float *ptr = fmatmul_c_scratch;
+    while (rem > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(rem));
+        asm volatile("vmv.v.i v8, 0");
+        asm volatile("vse32.v v8, (%0)" :: "r"(ptr));
+        ptr += vl;
+        rem -= vl;
+    }
+
+    // Call the core kernel
     fmatmul_4x4_deferred(fmatmul_c_scratch, fmatmul_a_scratch, b,
                          padded_m, (unsigned long int)N, (unsigned long int)K);
 
-    for (size_t idx = 0; idx < mk; idx++)
-        c[idx] += fmatmul_c_scratch[idx];
+    // Final reduction
+    size_t rem = (size_t)M * (size_t)K;
+    float *ptr_c = c;
+    const float *ptr_scratch = fmatmul_c_scratch;
+    
+    while (rem > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(rem));
+        
+        // Φόρτωση από το αποτέλεσμα και τον πίνακα c
+        asm volatile("vle32.v v8, (%0)" :: "r"(ptr_scratch));
+        asm volatile("vle32.v v16, (%0)" :: "r"(ptr_c));
+        
+        // c[idx] += fmatmul_c_scratch[idx]
+        asm volatile("vfadd.vv v16, v16, v8");
+        
+        // Αποθήκευση πίσω στο c
+        asm volatile("vse32.v v16, (%0)" :: "r"(ptr_c));
+        
+        ptr_c += vl;
+        ptr_scratch += vl;
+        rem -= vl;
+    }
 }
 
-int matrix_multiply_nt_verify(const float *a, const float *b,
+int matrix_multiply_nt_verify(const _Float16 *a, const _Float16 *b,
                               const int M, const int N, const int K,
                               const float eps)
 {
@@ -539,16 +571,16 @@ void matrix_transpose(float *x, int m, int n)
 
 
 
-static void matrix_multiply_scalar(const float *a, const float *b, float *c, const int M, const int N, const int K)
+static void matrix_multiply_scalar(const _Float16 *a, const _Float16 *b, float *c, const int M, const int N, const int K)
 {
     register int i, j, p;
-    register const float *a_ptr = a;
+    register const _Float16 *a_ptr = a;
     for (i = 0; i < M; i++)
     {
-        register const float *b_ptr = b;
+        register const _Float16 *b_ptr = b;
         for (j = 0; j < N; j++)
         {
-            register float apart = *(a_ptr++);
+            register float apart = (float)(*(a_ptr++));
             if (apart < 0.00001f && apart > -0.00001f)
             {
                 b_ptr += K;
@@ -556,29 +588,29 @@ static void matrix_multiply_scalar(const float *a, const float *b, float *c, con
             }
             register float *c_ptr = c + i * K;
             for (p = 0; p < K; p++)
-                *(c_ptr++) += *(b_ptr++) * apart;
+                *(c_ptr++) += (float)(*(b_ptr++)) * apart;
         }
     }
 }
 
-static void matrix_multiply_scalar_nt(const float *a, const float *b, float *c,
+static void matrix_multiply_scalar_nt(const _Float16 *a, const _Float16 *b, float *c,
                                       const int M, const int N, const int K)
 {
     for (int i = 0; i < M; i++)
     {
-        const float *a_ptr = a + (size_t)i * (size_t)N;
+        const _Float16 *a_ptr = a + (size_t)i * (size_t)N;
         for (int k = 0; k < K; k++)
         {
-            const float *b_ptr = b + (size_t)k * (size_t)N;
+            const _Float16 *b_ptr = b + (size_t)k * (size_t)N;
             float sum = 0.0f;
             for (int j = 0; j < N; j++)
-                sum += a_ptr[j] * b_ptr[j];
+                sum += (float)a_ptr[j] * (float)b_ptr[j];
             c[(size_t)i * (size_t)K + (size_t)k] += sum;
         }
     }
 }
 
-static void matrix_multiply_scalar_tn(const float *a, const float *b, float *c,
+static void matrix_multiply_scalar_tn(const _Float16 *a, const _Float16 *b, float *c,
                                       const int M, const int N, const int K)
 {
     for (int n = 0; n < N; n++)
@@ -587,19 +619,19 @@ static void matrix_multiply_scalar_tn(const float *a, const float *b, float *c,
         {
             float sum = 0.0f;
             for (int m = 0; m < M; m++)
-                sum += a[(size_t)m * (size_t)N + (size_t)n] *
-                       b[(size_t)m * (size_t)K + (size_t)k];
+                sum += (float)a[(size_t)m * (size_t)N + (size_t)n] *
+                       (float)b[(size_t)m * (size_t)K + (size_t)k];
             c[(size_t)n * (size_t)K + (size_t)k] += sum;
         }
     }
 }
 
-static void matrix_multiply_scalar_fused(const float *a, const float *b,
+static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
                                          const float *bias, float *c,
                                          const int M, const int N, const int K)
 {
     register int i, j, p;
-    register const float *a_ptr = a;
+    register const _Float16 *a_ptr = a;
     for (i = 0; i < M; i++)
     {
         float *c_ptr = c + i * K;
@@ -609,10 +641,10 @@ static void matrix_multiply_scalar_fused(const float *a, const float *b,
     }
     for (i = 0; i < M; i++)
     {
-        register const float *b_ptr = b;
+        register const _Float16 *b_ptr = b;
         for (j = 0; j < N; j++)
         {
-            register float apart = *(a_ptr++);
+            register float apart = (float)(*(a_ptr++));
             if (apart < 0.00001f && apart > -0.00001f)
             {
                 b_ptr += K;
@@ -620,7 +652,7 @@ static void matrix_multiply_scalar_fused(const float *a, const float *b,
             }
             register float *c_ptr = c + i * K;
             for (p = 0; p < K; p++)
-                *(c_ptr++) += *(b_ptr++) * apart;
+                *(c_ptr++) += (float)(*(b_ptr++)) * apart;
         }
     }
 }

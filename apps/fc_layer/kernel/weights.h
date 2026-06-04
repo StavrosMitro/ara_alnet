@@ -2,8 +2,8 @@
 #define WEIGHTS_H
 
 // From weights.c
-extern float fc1_weights[1048576];
-extern float fc1_bias[512];
+extern _Float16 fc1_weights[1048576];
+extern float    fc1_bias[512];
 
 // From the assembly file (.incbin)
 extern const float test_inputs[];

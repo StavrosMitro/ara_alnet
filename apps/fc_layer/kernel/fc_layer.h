@@ -15,10 +15,10 @@
 #define FC_MAX_INTERNAL 512
 
 typedef struct fc_op {
-    float *input;   float *d_input;
-    float *output;  float *d_output;
-    float *weights; float *d_weights;
-    float *bias;    float *d_bias;
+    _Float16 *input; float *d_input;
+    float *output;   float *d_output;
+    _Float16 *weights; float *d_weights;
+    float *bias;     float *d_bias;
     int in_units, out_units;
 
     short batchsize;
