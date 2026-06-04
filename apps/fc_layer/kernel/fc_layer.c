@@ -28,6 +28,7 @@
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
 #define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
+#define FC_OUTPUT_UNITS 512
 
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
 {
@@ -136,6 +137,7 @@ void fc_op_forward(fc_op *op)
     }
 }
 
+static _Float16 d_output_f16_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS] __attribute__((aligned(32)));
 
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
@@ -152,40 +154,61 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
         return;
     }
 
-    // calculate delta_input per sample using A * B^T
+    // =====================================================================
+    // 0. DOWNCAST: Μετατροπή του d_output (FP32) σε d_output_f16 (FP16)
+    // =====================================================================
+    int n_elems = op->batchsize * op->out_units;
+    const float *src_grad = op->d_output;
+    _Float16 *dst_grad = d_output_f16_buf;
+
+    while(n_elems > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_elems));
+        asm volatile("vle32.v v24, (%0)" :: "r"(src_grad));
+        
+        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
+        asm volatile("vfncvt.f.f.w v16, v24"); // Η ΠΡΑΓΜΑΤΙΚΗ μετατροπή σε FP16
+        asm volatile("vse16.v v16, (%0)" :: "r"(dst_grad) : "memory");
+        
+        src_grad += vl;
+        dst_grad += vl;
+        n_elems -= vl;
+    }
+
+    // =====================================================================
+    // 1. d_input calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
+    // =====================================================================
     t0 = fc_cycle_count_local();
-
-    // d_input calculation
-    matrix_multiply_nt_deferred(op->d_output, op->weights, op->d_input,
-                       op->batchsize, op->out_units, op->in_units); 
     
-
+    matrix_multiply_nt_deferred(d_output_f16_buf, op->weights, op->d_input,
+                       op->batchsize, op->out_units, op->in_units); 
 
     int64_t elapsed = fc_cycle_count_local() - t0;
-    if (cycles)
-        cycles->d_input_cycles += elapsed;
+    if (cycles) cycles->d_input_cycles += elapsed;
 
-    // calculate delta_bias averaged across batch
+    // =====================================================================
+    // 2. d_bias calculation: Χρησιμοποιεί το αυθεντικό FP32 op->d_output!
+    // =====================================================================
     t0 = fc_cycle_count_local();
 
     calc_bias_gradient_vec_batch2(op->d_bias, op->d_output, op->out_units);
 
     elapsed = fc_cycle_count_local() - t0;
-    if (cycles)
-        cycles->d_bias_cycles += elapsed;
+    if (cycles) cycles->d_bias_cycles += elapsed;
 
+    // =====================================================================
+    // 3. d_weights calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
+    // =====================================================================
     t0 = fc_cycle_count_local();
-    // calculate delta_weights
     register float *w_deltas = op->d_weights;
 
-    matrix_multiply_tn(op->input, op->d_output, w_deltas,
+    matrix_multiply_tn(op->input, d_output_f16_buf, w_deltas,
                     op->batchsize, op->in_units, op->out_units);
 
-
     elapsed = fc_cycle_count_local() - t0;
-    if (cycles)
-        cycles->d_weights_cycles += elapsed;
+    if (cycles) cycles->d_weights_cycles += elapsed;
 }
+
 
 static inline void vector_scale_f32(float *vec, float scale, int length) {
     int n = length;

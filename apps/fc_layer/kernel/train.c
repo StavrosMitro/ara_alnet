@@ -477,14 +477,13 @@ static float mse_loss(float *delta_preds, const float *preds, const float *targe
 static float mse_loss_vec(float *delta_preds, const float *preds, const float *targets, int units, int BATCH_SIZE)
 {
     int total_elems = BATCH_SIZE * units;
-    
-    //$\sum (0.5 \cdot d^2) = 0.5 \cdot \sum (d^2)$
-
     float scale_factor = 0.5f / (float)total_elems;
+    
+    // ΝΕΟ: Scale factor για τα gradients (1 / N)
+    float grad_scale = 1.0f / (float)total_elems;
 
-    size_t max_vl; //vector length * 8 basically due LMUL=8
-    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
-
+    size_t max_vl; 
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(max_vl));
     asm volatile("vmv.v.i v8, 0");
 
     int n = total_elems;
@@ -494,17 +493,21 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
 
     while (n > 0) {
         size_t vl;
-        
-        asm volatile("vsetvli %0, %1, e32, m8, tu, ma" : "=r"(vl) : "r"(n)); //we have set max_vl and compare with n=total_elements
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
 
-        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr));
-        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
+        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr)); // preds
+        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr)); // targets
 
-        asm volatile("vfsub.vv v16, v16, v24");
+        asm volatile("vfsub.vv v16, v16, v24");           // diff = p - t
 
-        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
-
+        // 1. Υπολογισμός τετραγώνου για το Loss με το ΑΡΧΙΚΟ diff
         asm volatile("vfmacc.vv v8, v16, v16");
+
+        // 2. ΝΕΟ: Κλιμάκωση του gradient (diff * grad_scale)
+        asm volatile("vfmul.vf v16, v16, %0" :: "f"(grad_scale));
+
+        // 3. Αποθήκευση του σωστού (κλιμακωμένου) gradient στο delta_preds
+        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));  
 
         p_ptr += vl;
         t_ptr += vl;
@@ -512,18 +515,16 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
         n -= vl;
     }
 
-    // reduction
+    // --- Reduction για το συνολικό Loss (όπως το είχαμε) ---
+    asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(max_vl));   
+    float zero = 0.0f;
+    asm volatile("vfmv.s.f v0, %0" :: "f"(zero));                         
+    asm volatile("vfredusum.vs v0, v8, v0");               
     
-
-    asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(max_vl));   // set vl = VLMAX
-    asm volatile("vmv.v.i v0, 0");                         // zero entire v0..v7 group
-    asm volatile("vfredsum.vs v0, v8, v0");               // sum all elements of v8..v15 into v0[0]
     float sum_squares;
     asm volatile("vfmv.f.s %0, v0" : "=f"(sum_squares));
 
     float mse_loss_val = sum_squares * scale_factor;
-    
-    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
     return mse_loss_val;
 }
 

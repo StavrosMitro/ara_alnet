@@ -477,7 +477,7 @@ void matrix_multiply_nt_deferred(const _Float16 *a, const _Float16 *b, float *c,
                          padded_m, (unsigned long int)N, (unsigned long int)K);
 
     // Final reduction
-    size_t rem = (size_t)M * (size_t)K;
+    rem = (size_t)M * (size_t)K;
     float *ptr_c = c;
     const float *ptr_scratch = fmatmul_c_scratch;
     
