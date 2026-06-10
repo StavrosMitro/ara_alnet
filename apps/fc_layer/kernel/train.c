@@ -39,36 +39,6 @@ static inline int64_t alexnet_cycle_count_local(void)
 #define ALEXNET_USE_MOMENTUM 1
 #endif
 
-#ifdef SHOW_OP_TIME
-#ifndef ALEXNET_TIMER_HZ
-#define ALEXNET_TIMER_HZ 1000000000ULL
-#endif
-
-#ifndef ALEXNET_USE_RDCYCLE_TIMER
-#define ALEXNET_USE_RDCYCLE_TIMER 0
-#endif
-
-typedef struct {
-    uint64_t tv_sec;
-    uint64_t tv_nsec;
-} alexnet_timer_t;
-
-static inline void alexnet_timer_now(alexnet_timer_t *tp)
-{
-#if ALEXNET_USE_RDCYCLE_TIMER
-    uint64_t cycles = 0;
-    asm volatile ("rdcycle %0" : "=r"(cycles));
-    tp->tv_sec = cycles / ALEXNET_TIMER_HZ;
-    tp->tv_nsec = ((cycles % ALEXNET_TIMER_HZ) * 1000000000ULL) / ALEXNET_TIMER_HZ;
-#else
-    static uint64_t soft_ticks = 0;
-    soft_ticks++;
-    tp->tv_sec = soft_ticks / ALEXNET_TIMER_HZ;
-    tp->tv_nsec = soft_ticks % ALEXNET_TIMER_HZ;
-#endif
-}
-#endif
-
 #ifndef ALEXNET_MAX_STEPS
 #define ALEXNET_MAX_STEPS 0
 #endif
