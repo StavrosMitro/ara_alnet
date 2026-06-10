@@ -1,0 +1,30 @@
+test to see if it compiled 14:36!
+batch size: 2 
+epochs: 100 
+batchsize in setup
+Network pointers use weights.c arrays directly (no parameter buffer copy).
+  fc1: 1
+Total trainable layers: 1/13
+>>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
+pred[ 434 115 ]  label[ 100 32 ]
+batch accuracy:  0.0000  (0 / 2 correct)
+batch macro F1:  0.0000  (over 4 classes)
+cycles[epoch 1 batch 1/2]: prep=26704, forward=115178, pred+metric=593110, loss=65, zero_d_input=105, backward_d_input=117289, backward_d_bias=34, backward_d_weights=127157, backward_total=244527, update=69698, backward_wrapper=339069
+epoch 1 step 1/2 loss: 1.747253
+pred[ 75 277 ]  label[ 235 145 ]
+batch accuracy:  0.0000  (0 / 2 correct)
+batch macro F1:  0.0000  (over 4 classes)
+cycles[epoch 1 batch 2/2]: prep=26704, forward=115178, pred+metric=593112, loss=65, zero_d_input=105, backward_d_input=117289, backward_d_bias=34, backward_d_weights=127157, backward_total=244527, update=69698, backward_wrapper=339069
+epoch 1 step 2/2 loss: 1.694666
+>>>>>>>>>>>>>>>>>>>> epoch 2 >>>>>>>>>>>>>>>>>>>>>>
+pred[ 434 115 ]  label[ 100 32 ]
+batch accuracy:  0.0000  (0 / 2 correct)
+batch macro F1:  0.0000  (over 4 classes)
+cycles[epoch 2 batch 1/2]: prep=26704, forward=115178, pred+metric=593110, loss=65, zero_d_input=105, backward_d_input=117289, backward_d_bias=34, backward_d_weights=127157, backward_total=244527, update=69698, backward_wrapper=339069
+epoch 2 step 1/2 loss: 1.724346
+pred[ 75 277 ]  label[ 235 145 ]
+batch accuracy:  0.0000  (0 / 2 correct)
+batch macro F1:  0.0000  (over 4 classes)
+cycles[epoch 2 batch 2/2]: prep=26704, forward=115178, pred+metric=593112, loss=65, zero_d_input=105, backward_d_input=117289, backward_d_bias=34, backward_d_weights=127157, backward_total=244527, update=69698, backward_wrapper=339069
+epoch 2 step 2/2 loss: 1.673227
+>>>>>>>>>>>>>>>>>>>> epoch 3 >>>>>>>>>>>>>>>>>>>>>>

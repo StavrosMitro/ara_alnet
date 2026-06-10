@@ -28,7 +28,6 @@
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
 #define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
-#define FC_OUTPUT_UNITS 512
 
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
 {
@@ -43,7 +42,7 @@ static inline unsigned long int fmatmul_row_block(unsigned long int m)
     return 4;
 }
 
-static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
                                          const float *bias, float *c,
                                          const int M, const int N,
                                          const int K);
@@ -58,9 +57,9 @@ static inline int64_t fc_cycle_count_local(void)
 static float fc_t_output_scratch[ALEXNET_STATIC_MAX_BATCH * FC_MAX_INTERNAL * 2];
 
 
-void fc_op_forward(fc_op *op)
+void fc_op_forward_32(fc_op *op)
 {
-    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
+    float *fmatmul_a_scratch = shared_memory_pool_32;
 
     if (op->batchsize <= 0 || op->in_units <= 0 || op->out_units <= 0)
         return;
@@ -82,48 +81,37 @@ void fc_op_forward(fc_op *op)
     const size_t mk = (size_t)op->batchsize * (size_t)op->out_units;
 
     size_t remaining_mn = mn;
-    const _Float16 *src_mn = op->input;
-    _Float16 *dst_mn = fmatmul_a_scratch;
+    const float *src_mn = op->input;
+    float *dst_mn = fmatmul_a_scratch;
     while (remaining_mn > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
-        asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
-        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
         src_mn += vl;
         dst_mn += vl;
         remaining_mn -= vl;
     }
 
     size_t remaining = pnk - mn;
-    _Float16 *dst = fmatmul_a_scratch + mn;
+    float *dst = fmatmul_a_scratch + mn;
     while (remaining > 0)
     {
         size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
         asm volatile("vmv.v.x v0, zero");
-        asm volatile("vse16.v v0, (%0);" : : "r"(dst) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
         dst += vl;
         remaining -= vl;
     }
 
-    size_t mk_padded = (size_t)padded_m * (size_t)op->out_units;
-    float *c_scratch_ptr = fmatmul_c_scratch;
-    while(mk_padded > 0) {
-        size_t vl;
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(mk_padded));
-        asm volatile("vmv.v.i v8, 0");
-        asm volatile("vse32.v v8, (%0)" :: "r"(c_scratch_ptr));
-        c_scratch_ptr += vl;
-        mk_padded -= vl;
-    }
-
-    fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, op->weights, op->bias,
+    fmatmul_fused_32(fmatmul_c_scratch_32, fmatmul_a_scratch, op->weights, op->bias,
                  padded_m, (unsigned long int)op->in_units,
                  (unsigned long int)op->out_units);
 
     size_t remaining_mk = mk;
-    const float *src_mk = fmatmul_c_scratch;
+    const float *src_mk = fmatmul_c_scratch_32;
     float *dst_mk = op->output;
     while (remaining_mk > 0)
     {
@@ -137,9 +125,8 @@ void fc_op_forward(fc_op *op)
     }
 }
 
-static _Float16 d_output_f16_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS] __attribute__((aligned(32)));
 
-void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
+void fc_op_backward_full_profile_32(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
     int64_t t0 = 0;
 
@@ -150,65 +137,44 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     }
 
     if (op->d_weights == NULL || op->d_bias == NULL) {
-        fc_op_backward_input_only(op);
+        fc_op_backward_input_only_32(op);
         return;
     }
 
-    // =====================================================================
-    // 0. DOWNCAST: Μετατροπή του d_output (FP32) σε d_output_f16 (FP16)
-    // =====================================================================
-    int n_elems = op->batchsize * op->out_units;
-    const float *src_grad = op->d_output;
-    _Float16 *dst_grad = d_output_f16_buf;
-
-    while(n_elems > 0) {
-        size_t vl;
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n_elems));
-        asm volatile("vle32.v v24, (%0)" :: "r"(src_grad));
-        
-        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
-        asm volatile("vfncvt.f.f.w v16, v24"); // Η ΠΡΑΓΜΑΤΙΚΗ μετατροπή σε FP16
-        asm volatile("vse16.v v16, (%0)" :: "r"(dst_grad) : "memory");
-        
-        src_grad += vl;
-        dst_grad += vl;
-        n_elems -= vl;
-    }
-
-    // =====================================================================
-    // 1. d_input calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
-    // =====================================================================
+    // calculate delta_input per sample using A * B^T
     t0 = fc_cycle_count_local();
+
+    // d_input calculation
+    matrix_multiply_nt_32(op->d_output, op->weights, op->d_input,
+                         op->batchsize, op->out_units, op->in_units);
     
-    matrix_multiply_nt(d_output_f16_buf, op->weights, op->d_input,
-                       op->batchsize, op->out_units, op->in_units); 
+
 
     int64_t elapsed = fc_cycle_count_local() - t0;
-    if (cycles) cycles->d_input_cycles += elapsed;
+    if (cycles)
+        cycles->d_input_cycles += elapsed;
 
-    // =====================================================================
-    // 2. d_bias calculation: Χρησιμοποιεί το αυθεντικό FP32 op->d_output!
-    // =====================================================================
+    // calculate delta_bias averaged across batch
     t0 = fc_cycle_count_local();
 
-    calc_bias_gradient_vec_batch2(op->d_bias, op->d_output, op->out_units);
+    calc_bias_gradient_vec_batch2_32(op->d_bias, op->d_output, op->out_units);
 
     elapsed = fc_cycle_count_local() - t0;
-    if (cycles) cycles->d_bias_cycles += elapsed;
+    if (cycles)
+        cycles->d_bias_cycles += elapsed;
 
-    // =====================================================================
-    // 3. d_weights calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
-    // =====================================================================
     t0 = fc_cycle_count_local();
+    // calculate delta_weights
     register float *w_deltas = op->d_weights;
 
-    matrix_multiply_tn(op->input, d_output_f16_buf, w_deltas,
+    matrix_multiply_tn_32(op->input, op->d_output, w_deltas,
                     op->batchsize, op->in_units, op->out_units);
 
-    elapsed = fc_cycle_count_local() - t0;
-    if (cycles) cycles->d_weights_cycles += elapsed;
-}
 
+    elapsed = fc_cycle_count_local() - t0;
+    if (cycles)
+        cycles->d_weights_cycles += elapsed;
+}
 
 static inline void vector_scale_f32(float *vec, float scale, int length) {
     int n = length;
@@ -226,7 +192,7 @@ static inline void vector_scale_f32(float *vec, float scale, int length) {
     }
 }
 
-void fc_op_backward_input_only(fc_op *op)
+void fc_op_backward_input_only_32(fc_op *op)
 {
     // Only propagate gradients to previous layer when this layer is frozen.
     for (int p = 0; p < op->batchsize; p++)
@@ -235,27 +201,27 @@ void fc_op_backward_input_only(fc_op *op)
         {
             register float d_o = op->d_output[p * op->out_units + j];
             for (int i = 0; i < op->in_units; i++)
-                op->d_input[p * op->in_units + i] += (float)op->weights[i * op->out_units + j] * d_o;
+                op->d_input[p * op->in_units + i] += op->weights[i * op->out_units + j] * d_o;
         }
     }
 
 }
 
 
-void calloc_fc_weights(fc_op *op)
+void calloc_fc_weights_32(fc_op *op)
 {
     if (op->weights)
-        memset(op->weights, 0, (size_t)op->in_units * op->out_units * sizeof(_Float16));
+        memset(op->weights, 0, (size_t)op->in_units * op->out_units * sizeof(float));
     if (op->bias)
         memset(op->bias, 0, (size_t)op->out_units * sizeof(float));
 }
 
-void free_fc_weights(fc_op *op)
+void free_fc_weights_32(fc_op *op)
 {
     (void)op;
 }
 
-void calloc_fc_dweights(fc_op *op)
+void calloc_fc_dweights_32(fc_op *op)
 {
     if (op->d_weights)
         memset(op->d_weights, 0, (size_t)op->in_units * op->out_units * sizeof(float));
@@ -263,29 +229,29 @@ void calloc_fc_dweights(fc_op *op)
         memset(op->d_bias, 0, (size_t)op->out_units * sizeof(float));
 }
 
-void free_fc_dweights(fc_op *op)
+void free_fc_dweights_32(fc_op *op)
 {
     (void)op;
 }
 
-void save_fc_weights(fc_op *op)
+void save_fc_weights_32(fc_op *op)
 {
     (void)op;
 }
 
-void load_fc_weights(fc_op *op, float *w_array, float *b_array)
+void load_fc_weights_32(fc_op *op, float *w_array, float *b_array)
 {
     memcpy(op->weights, w_array, sizeof(float) * op->in_units * op->out_units);
     memcpy(op->bias, b_array, sizeof(float) * op->out_units);
 }
 
 
-static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
+static void matrix_multiply_scalar_fused(const float *a, const float *b,
                                          const float *bias, float *c,
                                          const int M, const int N, const int K)
 {
     register int i, j, p;
-    register const _Float16 *a_ptr = a;
+    register const float *a_ptr = a;
     for (i = 0; i < M; i++)
     {
         float *c_ptr = c + i * K;
@@ -295,10 +261,10 @@ static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
     }
     for (i = 0; i < M; i++)
     {
-        register const _Float16 *b_ptr = b;
+        register const float *b_ptr = b;
         for (j = 0; j < N; j++)
         {
-            register float apart = (float)(*(a_ptr++));
+            register float apart = *(a_ptr++);
             if (apart < 0.00001f && apart > -0.00001f)
             {
                 b_ptr += K;
@@ -306,12 +272,12 @@ static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
             }
             register float *c_ptr = c + i * K;
             for (p = 0; p < K; p++)
-                *(c_ptr++) += (float)(*(b_ptr++)) * apart;
+                *(c_ptr++) += *(b_ptr++) * apart;
         }
     }
 }
 
-void calc_bias_gradient_vec_batch2(float *d_bias, const float *d_output, int out_units) 
+void calc_bias_gradient_vec_batch2_32(float *d_bias, const float *d_output, int out_units) 
 {
     /*
     // calculate delta_bias averaged across batch

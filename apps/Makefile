@@ -112,6 +112,23 @@ bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
 # code without vectorization to avoid Spike runtime corruption in momentum_sgd.
 fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
+# ---------------------------------------------------------------------------
+# fc_layer_test: FP16(mixed) vs FP32 equivalence harness. Links the 3 kernels
+# under test from both trees (fp16/ from fc_layer, fp32/ from fc_layer32 with
+# _32-suffixed externals). NOTE: bin/fc_layer% already supplies FC_LAYER_DEFINES
+# and AUTOVECTORIZE=0; here we (1) point the assembler at this app's own
+# generated_data for data.S, and (2) build main.c (which carries the hand-copied
+# vector momentum_sgd asm) without autovectorization, mirroring the train.c rule.
+# ---------------------------------------------------------------------------
+bin/fc_layer_test:  $(APPS_DIR)/Makefile
+bin/fc_layer_test:  ENV_DEFINES += -DALEXNET_STATIC_MAX_BATCH=2 -DALEXNET_BATCHSIZE=2
+bin/fc_layer_test:  AUTOVECTORIZE = 0
+bin/fc_layer_test:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
+
+fc_layer_test/main.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+fc_layer_test/main.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
 # conv_layer profile controls (mirrors fc_layer semantics)
 CONV_LAYER_MODE ?= train
 CONV_LAYER_BATCHSIZE ?= 2

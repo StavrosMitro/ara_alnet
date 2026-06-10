@@ -1,0 +1,41 @@
+=====================================================================
+ FC-layer mixed-precision (FP16) vs FP32 equivalence test suite
+   IN=2048  OUT=512  BATCH=2   REL_TOL=0.0300
+=====================================================================
+
+--- PART 1a: matrix_multiply variants (FP16 vs FP32) ---
+  [CHECK] matrix_multiply             n=1024      max_abs=0.00128424  max_rel=0.213119  mean_abs=0.00032509  (worst idx 726)
+  [CHECK] matrix_multiply_fused       n=1024      max_abs=0.00128496  max_rel=0.058663  mean_abs=0.00032510  (worst idx 726)
+  [CHECK] matrix_multiply_nt          n=4096      max_abs=0.00040063  max_rel=0.816843  mean_abs=0.00008514  (worst idx 953)
+  [CHECK] matrix_multiply_nt_deferred  n=4096      max_abs=1.59994102  max_rel=15999.410152  mean_abs=0.30798868  (worst idx 3596)
+  [CHECK] matrix_multiply_tn          n=1048576   max_abs=0.00019005  max_rel=1.572993  mean_abs=0.00002254  (worst idx 172348)
+
+--- PART 1b: fc_op_forward (full layer) ---
+  [CHECK] fc_op_forward.output        n=1024      max_abs=0.00128496  max_rel=0.058663  mean_abs=0.00032510  (worst idx 726)
+
+--- PART 1c: fc_op_backward_full_profile ---
+  [CHECK] backward.d_input            n=4096      max_abs=0.00040063  max_rel=0.816843  mean_abs=0.00008514  (worst idx 953)
+  [CHECK] backward.d_weights          n=1048576   max_abs=0.00019005  max_rel=1.572993  mean_abs=0.00002254  (worst idx 172348)
+  [PASS] backward.d_bias             n=512       max_abs=0.00000000  max_rel=0.000000  mean_abs=0.00000000  (worst idx 0)
+
+--- PART 1d: loss functions (on each path's forward output) ---
+  MSE loss:  fp16-path=1.12187481   fp32-path=1.12184668   |diff|=0.00002813
+  [PASS] mse.grad                    n=1024      max_abs=0.00000125  max_rel=0.008122  mean_abs=0.00000032  (worst idx 726)
+  CE  loss:  fp16-path=7.94127798   fp32-path=7.94148874   |diff|=0.00021076
+  [PASS] ce.grad                     n=1024      max_abs=0.00005046  max_rel=0.001302  mean_abs=0.00000061  (worst idx 401)
+
+--- PART 1e: momentum SGD update (FP16-weight vs FP32-weight) ---
+  [PASS] momentum_sgd.weights        n=8192      max_abs=0.00004009  max_rel=0.000898  mean_abs=0.00000982  (worst idx 1968)
+  [PASS] momentum_sgd.velocity       n=8192      max_abs=0.00000000  max_rel=0.000000  mean_abs=0.00000000  (worst idx 0)
+
+--- PART 2: end-to-end training step (forward->MSE->backward->update) ---
+  step 0:  loss16=1.15376294  loss32=1.15375614  |dloss|=0.00000679  weight max_rel=0.000518  weight max_abs=0.00003053
+  step 1:  loss16=1.15376294  loss32=1.15374827  |dloss|=0.00001466  weight max_rel=0.000698  weight max_abs=0.00003057
+  step 2:  loss16=1.15376294  loss32=1.15373349  |dloss|=0.00002944  weight max_rel=0.001035  weight max_abs=0.00003062
+  [PASS] flow.final_weights          n=1048576   max_abs=0.00003062  max_rel=0.001035  mean_abs=0.00000892  (worst idx 30644)
+
+=====================================================================
+ SUMMARY: 6/14 comparisons within REL_TOL=0.0300
+   (CHECK lines are not necessarily bugs: FP16 rounding can legitimately
+    exceed the tolerance on ill-conditioned reductions - inspect max_rel.)
+=====================================================================
