@@ -1,6 +1,7 @@
 //
 // File:        fc_layer.c
 // Description: Implementation of full connected layer
+// Author:      Haris Wang
 // Modified and got vectorized: Stavros Mitropoulos
 //
 #include <stdlib.h>
