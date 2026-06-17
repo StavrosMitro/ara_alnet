@@ -19,10 +19,16 @@
 #include "runtime.h"
 #include "fmatmul.h"
 
-#if ALEXNET_STATIC_MAX_BATCH > 4
-#define FMATMUL_MAX_M ALEXNET_STATIC_MAX_BATCH
-#else
+#if ALEXNET_STATIC_MAX_BATCH <= 4
 #define FMATMUL_MAX_M 4
+#elif ALEXNET_STATIC_MAX_BATCH <= 8
+#define FMATMUL_MAX_M 8
+#elif ALEXNET_STATIC_MAX_BATCH <= 64
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 15) / 16) * 16)
+#elif ALEXNET_STATIC_MAX_BATCH <= 128
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 7) / 8) * 8)
+#else
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 3) / 4) * 4)
 #endif
 
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
@@ -71,6 +77,8 @@ void fc_op_forward_32(fc_op *op)
         (unsigned long int)op->out_units > FMATMUL_MAX_K ||
         padded_m > FMATMUL_MAX_M)
     {
+        printf_("[SCALAR] fc_op_forward_32: batchsize=%d in=%d out=%d padded_m=%lu MAX_M=%d\n",
+                op->batchsize, op->in_units, op->out_units, padded_m, FMATMUL_MAX_M);
         matrix_multiply_scalar_fused(op->input, op->weights, op->bias, op->output,
                                      op->batchsize, op->in_units, op->out_units);
         return;
@@ -157,7 +165,7 @@ void fc_op_backward_full_profile_32(fc_op *op, fc_backward_cycle_breakdown *cycl
     // calculate delta_bias averaged across batch
     t0 = fc_cycle_count_local();
 
-    calc_bias_gradient_vec_batch2_32(op->d_bias, op->d_output, op->out_units);
+    calc_bias_gradient_vec_32(op->d_bias, op->d_output, op->out_units, op->batchsize);
 
     elapsed = fc_cycle_count_local() - t0;
     if (cycles)
@@ -194,6 +202,8 @@ static inline void vector_scale_f32(float *vec, float scale, int length) {
 
 void fc_op_backward_input_only_32(fc_op *op)
 {
+    printf_("[SCALAR] fc_op_backward_input_only_32: batchsize=%d in=%d out=%d\n",
+            op->batchsize, op->in_units, op->out_units);
     // Only propagate gradients to previous layer when this layer is frozen.
     for (int p = 0; p < op->batchsize; p++)
     {
@@ -277,51 +287,37 @@ static void matrix_multiply_scalar_fused(const float *a, const float *b,
     }
 }
 
-void calc_bias_gradient_vec_batch2_32(float *d_bias, const float *d_output, int out_units) 
+void calc_bias_gradient_vec_32(float *d_bias, const float *d_output, int out_units, int batchsize)
 {
-    /*
-    // calculate delta_bias averaged across batch
-    // Initialize bias accumulator to zero
-    for (int j = 0; j < op->out_units; j++)
-        op->d_bias[j] = 0.0f;
+    float inv_batch = 1.0f / (float)batchsize;
 
-    // Accumulate over batch, row by row
-    for (int p = 0; p < op->batchsize; p++) {
-        float* row = &(op->d_output[p * op->out_units]); //start of a batch
-        for (int j = 0; j < op->out_units; j++) {
-            op->d_bias[j] += row[j];
+    // d_bias is already zeroed by calloc_alexnet_d_params before backward
+    for (int p = 0; p < batchsize; p++) {
+        const float *row = d_output + (size_t)p * out_units;
+        float *bias_ptr = d_bias;
+        int j = out_units;
+        while (j > 0) {
+            size_t vl;
+            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(j));
+            asm volatile("vle32.v v8,  (%0)" :: "r"(bias_ptr));
+            asm volatile("vle32.v v16, (%0)" :: "r"(row));
+            asm volatile("vfadd.vv v8, v8, v16");
+            asm volatile("vse32.v v8,  (%0)" :: "r"(bias_ptr));
+            bias_ptr += vl;
+            row += vl;
+            j -= vl;
         }
     }
-    */
-    // Explicit pointers  (batchsize = 2)
-    const float *row0 = d_output;
-    const float *row1 = d_output + out_units;
-    float *bias_ptr = d_bias;
 
-    // DIV 2
-    float inv_batch = 0.5f; 
-
-    int j = out_units;
-    
-    while (j > 0) {
+    float *ptr = d_bias;
+    int n = out_units;
+    while (n > 0) {
         size_t vl;
-        
-        //LMUL=8 
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(j));
-
-        asm volatile("vle32.v v8, (%0)" :: "r"(row0));
-
-        asm volatile("vle32.v v16, (%0)" :: "r"(row1));
-
-        asm volatile("vfadd.vv v8, v8, v16");
-
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle32.v v8, (%0)" :: "r"(ptr));
         asm volatile("vfmul.vf v8, v8, %0" :: "f"(inv_batch));
-
-        asm volatile("vse32.v v8, (%0)" :: "r"(bias_ptr));
-
-        row0 += vl;
-        row1 += vl;
-        bias_ptr += vl;
-        j -= vl;
+        asm volatile("vse32.v v8, (%0)" :: "r"(ptr));
+        ptr += vl;
+        n -= vl;
     }
 }

@@ -72,13 +72,14 @@ endif
 # fc_layer profile controls (compatible with apps/fc_layer/gccMakefile semantics)
 FC_LAYER_MODE ?= train
 FC_LAYER_LOSS ?= MSE
-FC_LAYER_BATCHSIZE ?= 2
-FC_LAYER_EPOCHS ?= 100
+FC_LAYER_BATCHSIZE ?= 12
+FC_LAYER_EPOCHS ?= 1
 FC_LAYER_INFER_IDX ?= -1
 FC_LAYER_STATIC_MAX_BATCH ?= $(FC_LAYER_BATCHSIZE)
+FC_LAYER_SAMPLES ?= $(FC_LAYER_BATCHSIZE)
 
 ifeq ($(FC_LAYER_MODE),train)
-FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_EPOCHS)
+FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER_SAMPLES)
 else ifeq ($(FC_LAYER_MODE),inference)
 FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER_INFER_IDX)
 else
@@ -111,6 +112,48 @@ bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
 # Workaround: keep app-level autovectorization on, but compile training update
 # code without vectorization to avoid Spike runtime corruption in momentum_sgd.
 fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer32: pure FP32 fully-connected layer (mirrors fc_layer semantics)
+# ---------------------------------------------------------------------------
+FC_LAYER32_MODE ?= train
+FC_LAYER32_LOSS ?= MSE
+FC_LAYER32_BATCHSIZE ?= 12
+FC_LAYER32_EPOCHS ?= 1
+FC_LAYER32_INFER_IDX ?= -1
+FC_LAYER32_STATIC_MAX_BATCH ?= $(FC_LAYER32_BATCHSIZE)
+FC_LAYER32_SAMPLES ?= $(FC_LAYER32_BATCHSIZE)
+
+ifeq ($(FC_LAYER32_MODE),train)
+FC_LAYER32_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER32_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER32_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER32_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER32_SAMPLES)
+else ifeq ($(FC_LAYER32_MODE),inference)
+FC_LAYER32_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER32_INFER_IDX)
+else
+$(error Unsupported FC_LAYER32_MODE='$(FC_LAYER32_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER32_LOSS),MSE)
+FC_LAYER32_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER32_LOSS),CEL)
+FC_LAYER32_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER32_LOSS='$(FC_LAYER32_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER32_DEFINES := $(FC_LAYER32_MODE_DEFINES) $(FC_LAYER32_LOSS_DEFINES)
+
+bin/fc_layer32:  $(APPS_DIR)/Makefile
+bin/fc_layer32%: $(APPS_DIR)/Makefile
+bin/fc_layer32:  ENV_DEFINES += $(FC_LAYER32_DEFINES)
+bin/fc_layer32%: ENV_DEFINES += $(FC_LAYER32_DEFINES)
+bin/fc_layer32:  AUTOVECTORIZE = 0
+bin/fc_layer32%: AUTOVECTORIZE = 0
+bin/fc_layer32:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
+
+fc_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
 # ---------------------------------------------------------------------------
 # fc_layer_test: FP16(mixed) vs FP32 equivalence harness. Links the 3 kernels

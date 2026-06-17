@@ -1,0 +1,428 @@
+# Copyright 2019 ETH Zurich and University of Bologna.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Author: Matheus Cavalcante, ETH Zurich
+#         Samuel Riedel, ETH Zurich
+
+SHELL = /usr/bin/env bash
+ROOT_DIR := $(patsubst %/,%, $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+APPS_DIR := $(ROOT_DIR)
+COMMON_DIR := $(ROOT_DIR)/common
+TESTS_DIR := $(ROOT_DIR)/riscv-tests/isa
+
+# This will overwrite the ROOT_DIR variable from the included makefile
+include $(COMMON_DIR)/runtime.mk
+include $(COMMON_DIR)/riscv_tests.mk
+include $(COMMON_DIR)/default_args.mk
+
+# Per-app source finder: skip app-local virtualenv and git metadata.
+find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
+
+APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "main.c"))
+APPS += $(patsubst $(APPS_DIR)/%/main.cpp,%,$(shell find $(APPS_DIR) -name "main.cpp"))
+# Don't automatically compile the benchmark app, which is only a wrapper around the other apps
+BINARIES := $(filter-out bin/benchmarks bin/rivec-bmarks% bin/_%, $(addprefix bin/,$(APPS)))
+
+CVA6_EXTENSIONS := rv64ui rv64uc rv64um rv64uf rv64ud rv64si
+# Atomics are messy, since there is currently no memory region capable of handling them
+# CVA6_EXTENSIONS := rv64ua
+CVA6_BINARIES := $(addprefix bin/, $(cva6_tests))
+ARA_EXTENSIONS := rv64uv
+ARA_BINARIES := $(addprefix bin/, $(ara_tests))
+
+# Suffix for binaries
+ifeq ($(LINUX),1)
+BIN_SUFFIX := -linux
+else
+BIN_SUFFIX :=
+endif
+
+# FFT requires special treatment because of its header files
+ifeq ($(ENV_DEFINES),)
+bin/fft:  ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
+bin/fft%: ENV_DEFINES += -DFFT_SAMPLES=$(subst ",,$(firstword $(def_args_fft)))
+endif
+
+# Optional training step cap for AlexNet smoke runs.
+ALEXNET_MAX_STEPS ?= 0
+# Optional operator timing prints for long Spike runs.
+ALEXNET_SHOW_OP_TIME ?= 0
+
+ifeq ($(ALEXNET_SHOW_OP_TIME),1)
+ALEXNET_TIMING_DEFINE := -DSHOW_OP_TIME
+else
+ALEXNET_TIMING_DEFINE :=
+endif
+
+# # AlexNet default profile: training, batchsize=25, static batch=25, epochs=1
+# bin/alexnet:  ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=1 -DALEXNET_STATIC_MAX_BATCH=1 -DALEXNET_EPOCHS=1 -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) $(ALEXNET_TIMING_DEFINE)
+# bin/alexnet%: ENV_DEFINES += -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=1 -DALEXNET_STATIC_MAX_BATCH=1 -DALEXNET_EPOCHS=1 -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) $(ALEXNET_TIMING_DEFINE)
+
+# fc_layer profile controls (compatible with apps/fc_layer/gccMakefile semantics)
+FC_LAYER_MODE ?= train
+FC_LAYER_LOSS ?= MSE
+FC_LAYER_BATCHSIZE ?= 12
+FC_LAYER_EPOCHS ?= 1
+FC_LAYER_INFER_IDX ?= -1
+FC_LAYER_STATIC_MAX_BATCH ?= $(FC_LAYER_BATCHSIZE)
+FC_LAYER_SAMPLES ?= $(FC_LAYER_BATCHSIZE)
+
+ifeq ($(FC_LAYER_MODE),train)
+FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER_SAMPLES)
+else ifeq ($(FC_LAYER_MODE),inference)
+FC_LAYER_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER_INFER_IDX)
+else
+$(error Unsupported FC_LAYER_MODE='$(FC_LAYER_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER_LOSS),MSE)
+FC_LAYER_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER_LOSS),CEL)
+FC_LAYER_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER_LOSS='$(FC_LAYER_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
+
+bin/fc_layer:  $(APPS_DIR)/Makefile
+bin/fc_layer%: $(APPS_DIR)/Makefile
+bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer:  AUTOVECTORIZE = 0
+bin/fc_layer%: AUTOVECTORIZE = 0
+bin/fc_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+
+fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer32: pure FP32 fully-connected layer (mirrors fc_layer semantics)
+# ---------------------------------------------------------------------------
+FC_LAYER32_MODE ?= train
+FC_LAYER32_LOSS ?= MSE
+FC_LAYER32_BATCHSIZE ?= 12
+FC_LAYER32_EPOCHS ?= 1
+FC_LAYER32_INFER_IDX ?= -1
+FC_LAYER32_STATIC_MAX_BATCH ?= $(FC_LAYER32_BATCHSIZE)
+FC_LAYER32_SAMPLES ?= $(FC_LAYER32_BATCHSIZE)
+
+ifeq ($(FC_LAYER32_MODE),train)
+FC_LAYER32_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER32_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER32_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER32_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER32_SAMPLES)
+else ifeq ($(FC_LAYER32_MODE),inference)
+FC_LAYER32_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER32_INFER_IDX)
+else
+$(error Unsupported FC_LAYER32_MODE='$(FC_LAYER32_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER32_LOSS),MSE)
+FC_LAYER32_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER32_LOSS),CEL)
+FC_LAYER32_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER32_LOSS='$(FC_LAYER32_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER32_DEFINES := $(FC_LAYER32_MODE_DEFINES) $(FC_LAYER32_LOSS_DEFINES)
+
+bin/fc_layer32:  $(APPS_DIR)/Makefile
+bin/fc_layer32%: $(APPS_DIR)/Makefile
+bin/fc_layer32:  ENV_DEFINES += $(FC_LAYER32_DEFINES)
+bin/fc_layer32%: ENV_DEFINES += $(FC_LAYER32_DEFINES)
+bin/fc_layer32:  AUTOVECTORIZE = 0
+bin/fc_layer32%: AUTOVECTORIZE = 0
+bin/fc_layer32:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
+
+fc_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer_mixed: FP16 mixed-precision FC layer (server name for fc_layer)
+# batch=12, samples=12, epochs=1
+# ---------------------------------------------------------------------------
+FC_LAYER_MIXED_MODE ?= train
+FC_LAYER_MIXED_LOSS ?= MSE
+FC_LAYER_MIXED_BATCHSIZE ?= 12
+FC_LAYER_MIXED_EPOCHS ?= 1
+FC_LAYER_MIXED_INFER_IDX ?= -1
+FC_LAYER_MIXED_STATIC_MAX_BATCH ?= $(FC_LAYER_MIXED_BATCHSIZE)
+FC_LAYER_MIXED_SAMPLES ?= $(FC_LAYER_MIXED_BATCHSIZE)
+
+ifeq ($(FC_LAYER_MIXED_MODE),train)
+FC_LAYER_MIXED_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_MIXED_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_MIXED_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_MIXED_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER_MIXED_SAMPLES)
+else ifeq ($(FC_LAYER_MIXED_MODE),inference)
+FC_LAYER_MIXED_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER_MIXED_INFER_IDX)
+else
+$(error Unsupported FC_LAYER_MIXED_MODE='$(FC_LAYER_MIXED_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER_MIXED_LOSS),MSE)
+FC_LAYER_MIXED_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER_MIXED_LOSS),CEL)
+FC_LAYER_MIXED_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER_MIXED_LOSS='$(FC_LAYER_MIXED_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER_MIXED_DEFINES := $(FC_LAYER_MIXED_MODE_DEFINES) $(FC_LAYER_MIXED_LOSS_DEFINES)
+
+bin/fc_layer_mixed:  $(APPS_DIR)/Makefile
+bin/fc_layer_mixed%: $(APPS_DIR)/Makefile
+bin/fc_layer_mixed:  ENV_DEFINES += $(FC_LAYER_MIXED_DEFINES)
+bin/fc_layer_mixed%: ENV_DEFINES += $(FC_LAYER_MIXED_DEFINES)
+bin/fc_layer_mixed:  AUTOVECTORIZE = 0
+bin/fc_layer_mixed%: AUTOVECTORIZE = 0
+bin/fc_layer_mixed:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_mixed
+bin/fc_layer_mixed%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_mixed
+bin/fc_layer_mixed:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_mixed
+bin/fc_layer_mixed%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_mixed
+
+fc_layer_mixed/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer_full: pure FP32 FC layer (server name for fc_layer32)
+# batch=12, samples=12, epochs=1
+# ---------------------------------------------------------------------------
+FC_LAYER_FULL_MODE ?= train
+FC_LAYER_FULL_LOSS ?= MSE
+FC_LAYER_FULL_BATCHSIZE ?= 12
+FC_LAYER_FULL_EPOCHS ?= 1
+FC_LAYER_FULL_INFER_IDX ?= -1
+FC_LAYER_FULL_STATIC_MAX_BATCH ?= $(FC_LAYER_FULL_BATCHSIZE)
+FC_LAYER_FULL_SAMPLES ?= $(FC_LAYER_FULL_BATCHSIZE)
+
+ifeq ($(FC_LAYER_FULL_MODE),train)
+FC_LAYER_FULL_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER_FULL_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER_FULL_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER_FULL_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER_FULL_SAMPLES)
+else ifeq ($(FC_LAYER_FULL_MODE),inference)
+FC_LAYER_FULL_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER_FULL_INFER_IDX)
+else
+$(error Unsupported FC_LAYER_FULL_MODE='$(FC_LAYER_FULL_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER_FULL_LOSS),MSE)
+FC_LAYER_FULL_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER_FULL_LOSS),CEL)
+FC_LAYER_FULL_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER_FULL_LOSS='$(FC_LAYER_FULL_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER_FULL_DEFINES := $(FC_LAYER_FULL_MODE_DEFINES) $(FC_LAYER_FULL_LOSS_DEFINES)
+
+bin/fc_layer_full:  $(APPS_DIR)/Makefile
+bin/fc_layer_full%: $(APPS_DIR)/Makefile
+bin/fc_layer_full:  ENV_DEFINES += $(FC_LAYER_FULL_DEFINES)
+bin/fc_layer_full%: ENV_DEFINES += $(FC_LAYER_FULL_DEFINES)
+bin/fc_layer_full:  AUTOVECTORIZE = 0
+bin/fc_layer_full%: AUTOVECTORIZE = 0
+bin/fc_layer_full:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_full
+bin/fc_layer_full%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_full
+bin/fc_layer_full:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_full
+bin/fc_layer_full%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_full
+
+fc_layer_full/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer_test: FP16(mixed) vs FP32 equivalence harness.
+# ---------------------------------------------------------------------------
+bin/fc_layer_test:  $(APPS_DIR)/Makefile
+bin/fc_layer_test:  ENV_DEFINES += -DALEXNET_STATIC_MAX_BATCH=2 -DALEXNET_BATCHSIZE=2
+bin/fc_layer_test:  AUTOVECTORIZE = 0
+bin/fc_layer_test:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
+
+fc_layer_test/main.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+fc_layer_test/main.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# conv_layer profile controls (mirrors fc_layer semantics)
+CONV_LAYER_MODE ?= train
+CONV_LAYER_BATCHSIZE ?= 2
+CONV_LAYER_EPOCHS ?= 1
+CONV_LAYER_INFER_IDX ?= -1
+CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
+
+ifeq ($(CONV_LAYER_MODE),train)
+CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(CONV_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(CONV_LAYER_EPOCHS)
+else ifeq ($(CONV_LAYER_MODE),inference)
+CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(CONV_LAYER_INFER_IDX)
+else
+$(error Unsupported CONV_LAYER_MODE='$(CONV_LAYER_MODE)'. Use train or inference)
+endif
+
+CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES)
+
+bin/conv_layer:  $(APPS_DIR)/Makefile
+bin/conv_layer%: $(APPS_DIR)/Makefile
+bin/conv_layer:  ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer%: ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer:  AUTOVECTORIZE = 0
+bin/conv_layer%: AUTOVECTORIZE = 0
+bin/conv_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+
+conv_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+conv_layer/%.c.o: $(APPS_DIR)/Makefile
+conv_layer/%.S.o: $(APPS_DIR)/Makefile
+conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
+conv_layer/%.S.o.spike: $(APPS_DIR)/Makefile
+
+all: $(BINARIES)
+
+# Pre-process the linker-script to correclty align the sections
+.PHONY: linker_script
+linker_script: $(COMMON_DIR)/script/align_sections.sh $(ROOT_DIR)/../../config/$(config).mk
+	chmod +x $(COMMON_DIR)/script/align_sections.sh
+	rm -f $(COMMON_DIR)/link.ld && cp $(COMMON_DIR)/arch.link.ld $(COMMON_DIR)/link.ld
+	$(COMMON_DIR)/script/align_sections.sh $(nr_lanes) $(COMMON_DIR)/link.ld
+
+# Make all applications
+$(APPS): % : bin/% $(APPS_DIR)/Makefile $(shell find common -type f)
+.PHONY: $(BINARIES)
+
+# Patch spike crt0 to enable vector extension before execution
+.PHONY: patch-spike-crt0
+patch-spike-crt0: $(spike_env_dir)/benchmarks/common/crt.S
+	sed -i s/"li t0, MSTATUS_FS | MSTATUS_XS$$"/"li t0, MSTATUS_FS | MSTATUS_XS | MSTATUS_VS"/ $<
+	git update-index --assume-unchanged $<
+
+# Only some applications need to generate and then compile the data file
+# Generate a dummy data file for applications that do not need it
+ifeq ($(old_data),1)
+else
+define app_gen_data_template
+.PHONY: $1/data.S
+$1/data.S:
+	cd $1 && if [ -d script ]; then ${PYTHON} script/gen_data.py $(subst ",,$(def_args_$1)) > data.S ; else touch data.S; fi
+endef
+$(foreach app,$(APPS),$(eval $(call app_gen_data_template,$(app))))
+endif
+
+define vector_trace_template
+ideal_dispatcher/vtrace/$1.vtrace: bin/$1.spike $(VTRACE_SCRIPTS)
+	mkdir -p ideal_dispatcher/vtrace ideal_dispatcher/log ideal_dispatcher/temp
+	echo "run" | $(RISCV_SIM_MOD) $(RISCV_SIM_MOD_OPT) $$< 2> ideal_dispatcher/temp/$1.temp 1> ideal_dispatcher/log/$1.log
+	cd ideal_dispatcher && scripts/vtrace.sh temp/$1.temp vtrace/$1.vtrace
+endef
+$(foreach app,$(APPS),$(eval $(call vector_trace_template,$(app))))
+
+define app_compile_template_ideal
+bin/$1.ideal: bin/$1.spike ideal_dispatcher/vtrace/$1.vtrace
+	mkdir -p bin/
+	cp bin/$1.spike bin/$1.ideal
+endef
+$(foreach app,$(APPS),$(eval $(call app_compile_template_ideal,$(app))))
+
+define app_compile_template_spike
+bin/$1.spike: $1/data.S.o.spike $(addsuffix .o.spike, $(call find_app_sources,$1)) $(RUNTIME_SPIKE) $(COMMON_SPIKE) patch-spike-crt0
+	mkdir -p bin/
+	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS_SPIKE) -o $$@ $$(addsuffix .o.spike, $$(call find_app_sources,$1)) $(RUNTIME_SPIKE) $$(RISCV_LDFLAGS_SPIKE) -DSPIKE
+	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
+endef
+$(foreach app,$(APPS),$(eval $(call app_compile_template_spike,$(app))))
+
+define app_compile_template
+bin/$1$(BIN_SUFFIX): $1/data.S.o $(addsuffix .o, $(call find_app_sources,$1)) $(RUNTIME_LLVM) linker_script
+	mkdir -p bin/
+	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS) -o $$@ $$(addsuffix .o, $$(call find_app_sources,$1)) $(RUNTIME_LLVM) $$(RISCV_LDFLAGS)
+	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
+	$$(RISCV_STRIP) $$@ -S --strip-unneeded
+endef
+$(foreach app,$(APPS),$(eval $(call app_compile_template,$(app))))
+
+# Make the RISC-V tests
+riscv_tests: $(CVA6_BINARIES) $(ARA_BINARIES)
+
+define rvtest_compile_template
+TESTS_$(1) := $(addprefix bin/, $($(addsuffix _ara_tests, $1)))
+
+bin/$(1)-ara-%: $(TESTS_DIR)/$(1)/%.$(2) $(RUNTIME_GCC) linker_script
+	mkdir -p bin/
+	$$(RISCV_CC_GCC) -Iinclude -I$$(TESTS_DIR)/macros/scalar -I$$(TESTS_DIR)/macros/vector $$(RISCV_CCFLAGS_GCC) $$(RISCV_LDFLAGS_GCC) -o $$@ $$< $(RUNTIME_GCC)
+	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
+	$$(RISCV_STRIP) $$@ -S --strip-unneeded
+endef
+
+define rvtest_compile_template_c
+TESTS_$(1) := $(addprefix bin/, $($(addsuffix _ara_tests, $1)))
+
+bin/$(1)-ara-%: $(TESTS_DIR)/$(1)/%.$(2) $(RUNTIME_LLVM) linker_script
+	mkdir -p bin/
+	$$(RISCV_CC) -Iinclude -I$$(TESTS_DIR)/macros/scalar -I$$(TESTS_DIR)/macros/vector $$(RISCV_CCFLAGS) $$(RISCV_LDFLAGS) -o $$@ $$< $(RUNTIME_LLVM)
+	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
+	$$(RISCV_STRIP) $$@ -S --strip-unneeded
+endef
+# CVA6 tests are written in assembly
+$(foreach extension, $(CVA6_EXTENSIONS), $(eval $(call rvtest_compile_template,$(extension),S)))
+# Ara tests are written in C
+$(foreach extension, $(ARA_EXTENSIONS), $(eval $(call rvtest_compile_template_c,$(extension),c)))
+
+# Run Spike tests
+.PHONY: riscv_tests_spike
+riscv_tests_spike: patch-spike-crt0
+	# Compile the tests
+	PATH=$(GCC_INSTALL_DIR)/bin:$(LLVM_INSTALL_DIR)/bin:${PATH} ARA_DEFINES="$(DEFINES)" make -j4 -C riscv-tests/isa
+	# Run the tests
+	PATH=$(ISA_SIM_INSTALL_DIR)/bin:${PATH} make -C riscv-tests/isa run
+
+# Format the sourcecode
+.PHONY: format
+format:
+	$(LLVM_INSTALL_DIR)/bin/clang-format -style=file -i $$(find . | grep -E "\.[h,c,cpp]$$" | grep -v riscv-tests)
+	$(LLVM_INSTALL_DIR)/bin/clang-format -style=file -i $$(find riscv-tests/isa/rv64uv | grep -E "\.[h,c,cpp]$$")
+
+# Run benchmarks on Spike
+define run_benchmark_spike
+spike-run-$1: bin/$1.spike
+	mkdir -p spike_runs
+	@echo
+	@echo "Simulating $1 with SPIKE:"
+	@echo
+	$(RISCV_SIM) $(RISCV_SIM_OPT) $$< | tee spike_runs/$$@
+endef
+$(foreach app,$(APPS),$(eval $(call run_benchmark_spike,$(app))))
+
+# Clean Spike simulation
+.PHONY: riscv_tests_spike_clean
+riscv_tests_spike_clean:
+	make -C riscv-tests/isa clean
+
+.PHONY: benchmarks_clean
+benchmarks_clean:
+	cd $(APPS_DIR)/benchmarks && \
+	rm -vf *.S.* *.c.*        && \
+	rm -vf data/*.S.*         && \
+	rm -vf kernel/*.c.*
+
+.PHONY: clean
+clean: riscv_tests_spike_clean benchmarks_clean
+	rm -vf $(BINARIES)
+	rm -vf $(CVA6_BINARIES)
+	rm -vf $(ARA_BINARIES)
+	rm -vf $(addsuffix .dump,$(BINARIES))
+	rm -vf $(addsuffix .dump,$(CVA6_BINARIES))
+	rm -vf $(addsuffix .dump,$(ARA_BINARIES))
+	rm -vf $(addsuffix /main.c.o,$(APPS))
+	rm -vf $(RUNTIME_GCC)
+	rm -vf $(RUNTIME_LLVM)
+	rm -vf $(RUNTIME_SPIKE)
+	for app in $(APPS); do cd $(APPS_DIR)/$${app} && rm -f $$(find . -name "*.c.o*" -o -name "*.S.o*") && cd ..; done
+
+.INTERMEDIATE: $(addsuffix /main.c.o,$(APPS))

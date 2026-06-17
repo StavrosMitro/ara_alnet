@@ -21,10 +21,16 @@
 
 float shared_memory_pool_32[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 
-#if ALEXNET_STATIC_MAX_BATCH > 4
-#define FMATMUL_MAX_M ALEXNET_STATIC_MAX_BATCH
-#else
+#if ALEXNET_STATIC_MAX_BATCH <= 4
 #define FMATMUL_MAX_M 4
+#elif ALEXNET_STATIC_MAX_BATCH <= 8
+#define FMATMUL_MAX_M 8
+#elif ALEXNET_STATIC_MAX_BATCH <= 64
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 15) / 16) * 16)
+#elif ALEXNET_STATIC_MAX_BATCH <= 128
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 7) / 8) * 8)
+#else
+#define FMATMUL_MAX_M (((ALEXNET_STATIC_MAX_BATCH + 3) / 4) * 4)
 #endif
 
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
@@ -81,6 +87,7 @@ void matrix_multiply_32(const float *a, const float *b, float *c, const int M, c
         (unsigned long int)K > FMATMUL_MAX_K ||
         padded_m > FMATMUL_MAX_M)
     {
+        printf_("[SCALAR] matrix_multiply_32: M=%d N=%d K=%d padded_m=%lu MAX_M=%d\n", M, N, K, padded_m, FMATMUL_MAX_M);
         matrix_multiply_scalar(a, b, c, M, N, K);
         return;
     }
@@ -165,6 +172,7 @@ void matrix_multiply_fused_32(const float *a, const float *b, const float *bias,
         (unsigned long int)K > FMATMUL_MAX_K ||
         padded_m > FMATMUL_MAX_M)
     {
+        printf_("[SCALAR] matrix_multiply_fused_32: M=%d N=%d K=%d padded_m=%lu MAX_M=%d\n", M, N, K, padded_m, FMATMUL_MAX_M);
         matrix_multiply_scalar_fused(a, b, bias, c, M, N, K);
         return;
     }
@@ -330,6 +338,7 @@ void matrix_multiply_tn_32(const float *a, const float *b, float *c,
     }
 
     if (((size_t)M * (size_t)padded_n) > MATRIX_TRANSPOSE_WORKSPACE_ELEMS) {
+        printf_("[SCALAR] matrix_multiply_tn_32: M=%d N=%d K=%d (workspace too small)\n", M, N, K);
         matrix_multiply_scalar_tn(a, b, c, M, N, K);
         return;
     }
