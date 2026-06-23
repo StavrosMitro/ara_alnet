@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
+"""Generate synthetic training vectors for the conv_layer benchmark.
+
+Default config (matches alexnet.h defaults):
+  BATCH=4  C_IN=43  C_OUT=43  KERNEL=3  H=8  W=8  PAD=1
+
+Override via CLI to benchmark different spatial / channel sizes:
+  python3 generate_conv_test_vectors.py --batch 4 --c-in 64 --c-out 64 --h 32 --w 32
+
+The number of generated samples (--batch) must equal ALEXNET_BATCHSIZE used
+when compiling, so that CONV_TOTAL_SAMPLES == ALEXNET_BATCHSIZE and the
+memcpy in train.c never reads past the end of the binary.
+"""
 import argparse
 from pathlib import Path
 
 import numpy as np
-
-BATCH = 4
-C_IN = 43
-C_OUT = 43
-KERNEL = 3
-H_IN = 8
-W_IN = 8
-PADDING = 1
-STRIDE = 1
-H_OUT = 8
-W_OUT = 8
-
-INPUT_ELEMS = C_IN * H_IN * W_IN
-OUTPUT_ELEMS = C_OUT * H_OUT * W_OUT
-WEIGHT_ELEMS = C_OUT * C_IN * KERNEL * KERNEL
 
 
 def write_c_array_f32(f, name: str, arr: np.ndarray, per_line: int = 8) -> None:
@@ -26,48 +23,76 @@ def write_c_array_f32(f, name: str, arr: np.ndarray, per_line: int = 8) -> None:
     for i in range(0, flat.size, per_line):
         chunk = flat[i : i + per_line]
         vals = ", ".join(f"{x:.8f}f" for x in chunk)
-        if i + per_line >= flat.size:
-            f.write(f"    {vals}\n")
-        else:
-            f.write(f"    {vals},\n")
+        comma = "" if i + per_line >= flat.size else ","
+        f.write(f"    {vals}{comma}\n")
     f.write("};\n\n")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate CONV(43->43, 3x3, 8x8) synthetic vectors")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--out-dir", default="generated_data", help="Output directory for binary files")
+    parser = argparse.ArgumentParser(
+        description="Generate conv_layer benchmark vectors",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--seed",      type=int, default=42,   help="Random seed")
+    parser.add_argument("--batch",     type=int, default=4,    help="Number of samples (== ALEXNET_BATCHSIZE)")
+    parser.add_argument("--c-in",      type=int, default=43,   help="Input channels  (CONV1_IN_CHANNELS)")
+    parser.add_argument("--c-out",     type=int, default=43,   help="Output channels (CONV1_OUT_CHANNELS)")
+    parser.add_argument("--h",         type=int, default=8,    help="Image height == output height (same-padding)")
+    parser.add_argument("--w",         type=int, default=8,    help="Image width  == output width  (same-padding)")
+    parser.add_argument("--kernel",    type=int, default=3,    help="Kernel size (stays 3)")
+    parser.add_argument("--out-dir",   default="generated_data", help="Output directory for binary files")
     parser.add_argument("--weights-c", default="kernel/weights.c", help="Path to generated weights.c")
     args = parser.parse_args()
 
-    rng = np.random.default_rng(args.seed)
+    BATCH  = args.batch
+    C_IN   = args.c_in
+    C_OUT  = args.c_out
+    H      = args.h
+    W      = args.w
+    KERNEL = args.kernel
 
-    inputs = rng.uniform(-1.0, 1.0, size=(BATCH, INPUT_ELEMS)).astype(np.float32)
-    targets = rng.uniform(-1.0, 1.0, size=(BATCH, OUTPUT_ELEMS)).astype(np.float32)
-    labels = rng.integers(0, C_OUT, size=(BATCH,), dtype=np.int32)
+    INPUT_ELEMS  = C_IN  * H * W
+    OUTPUT_ELEMS = C_OUT * H * W          # same-padding: spatial dims unchanged
+    WEIGHT_ELEMS = C_OUT * C_IN * KERNEL * KERNEL
 
-    weights = rng.uniform(-0.1, 0.1, size=(WEIGHT_ELEMS,)).astype(np.float32)
-    bias = np.ones((C_OUT,), dtype=np.float32)
+    print(f"Config: BATCH={BATCH}  C_IN={C_IN}  C_OUT={C_OUT}  H={H}  W={W}  K={KERNEL}x{KERNEL}")
+    print(f"  input/sample  : {INPUT_ELEMS:>8} floats = {INPUT_ELEMS*4/1024:.1f} KB")
+    print(f"  output/sample : {OUTPUT_ELEMS:>8} floats = {OUTPUT_ELEMS*4/1024:.1f} KB")
+    print(f"  weights       : {WEIGHT_ELEMS:>8} floats = {WEIGHT_ELEMS*4/1024:.1f} KB")
+    xcol = C_IN * KERNEL * KERNEL * H * W
+    print(f"  xcol/image    : {xcol:>8} floats = {xcol*4/1024:.1f} KB  (CONV1_XCOL_ELEMS)")
+    print(f"  vector util   : N={W} / VLMAX=512 = {W/512*100:.1f}%  (fconv3d e32,m2 VLEN=8192)")
+
+    np.random.seed(args.seed)
+
+    inputs  = np.random.uniform(-1.0,  1.0, size=(BATCH, INPUT_ELEMS)).astype(np.float32)
+    targets = np.random.uniform(-1.0,  1.0, size=(BATCH, OUTPUT_ELEMS)).astype(np.float32)
+    labels  = np.random.randint(0, C_OUT, size=(BATCH,)).astype(np.int32)
+    weights = np.random.uniform(-0.1, 0.1, size=(WEIGHT_ELEMS,)).astype(np.float32)
+    bias    = np.ones((C_OUT,), dtype=np.float32)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    inputs.tofile(out_dir / "inputs.bin")
-    targets.tofile(out_dir / "targets.bin")
-    labels.tofile(out_dir / "labels.bin")
+    inputs.tofile(str(out_dir / "inputs.bin"))
+    targets.tofile(str(out_dir / "targets.bin"))
+    labels.tofile(str(out_dir / "labels.bin"))
 
     weights_path = Path(args.weights_c)
     weights_path.parent.mkdir(parents=True, exist_ok=True)
-
     with weights_path.open("w", encoding="ascii") as f:
-        f.write("// Auto-generated by scripts/generate_conv_test_vectors.py\n\n")
+        f.write("// Auto-generated by scripts/generate_conv_test_vectors.py\n")
+        f.write(f"// Config: C_IN={C_IN} C_OUT={C_OUT} H={H} W={W} K={KERNEL} BATCH={BATCH}\n\n")
         write_c_array_f32(f, "conv1_weights", weights)
-        write_c_array_f32(f, "conv1_bias", bias)
+        write_c_array_f32(f, "conv1_bias",    bias)
 
-    print(f"Generated: {out_dir / 'inputs.bin'}")
-    print(f"Generated: {out_dir / 'targets.bin'}")
-    print(f"Generated: {out_dir / 'labels.bin'}")
-    print(f"Generated: {weights_path}")
+    print(f"\nGenerated:")
+    print(f"  {out_dir / 'inputs.bin'}")
+    print(f"  {out_dir / 'targets.bin'}")
+    print(f"  {out_dir / 'labels.bin'}")
+    print(f"  {weights_path}")
+    print(f"\nTo build & run:")
+    print(f"  make -f gccMakefile MODE=train BATCHSIZE={BATCH} C_IN={C_IN} C_OUT={C_OUT} H={H} W={W} clean all run-train")
 
 
 if __name__ == "__main__":

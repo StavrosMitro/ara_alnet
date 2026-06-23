@@ -3,6 +3,8 @@
 // Description: alexnet.h
 // Author:      Haris Wang
 //
+#ifndef ALEXNET_H
+#define ALEXNET_H
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -81,19 +83,38 @@
 #define DROPOUT_PROB  0.0
 
 //
-// Single convolution layer training profile
+// Single convolution layer training profile.
+// All CONV1_* values can be overridden at compile time via -D flags.
 //
-#define CONV1_IN_CHANNELS 43
+#ifndef CONV1_IN_CHANNELS
+#define CONV1_IN_CHANNELS  43
+#endif
+#ifndef CONV1_OUT_CHANNELS
 #define CONV1_OUT_CHANNELS 43
+#endif
+#ifndef CONV1_KERNEL_L
 #define CONV1_KERNEL_L 3
+#endif
+#ifndef CONV1_STRIDE
 #define CONV1_STRIDE 1
+#endif
+#ifndef CONV1_PADDING
 #define CONV1_PADDING 1
+#endif
+#ifndef CONV1_IN_W
 #define CONV1_IN_W 8
+#endif
+#ifndef CONV1_IN_H
 #define CONV1_IN_H 8
-#define CONV1_OUT_W 8
-#define CONV1_OUT_H 8
-#define CONV1_IN_UNITS (CONV1_IN_CHANNELS * CONV1_IN_W * CONV1_IN_H)
-#define CONV1_OUT_UNITS (CONV1_OUT_CHANNELS * CONV1_OUT_W * CONV1_OUT_H)
+#endif
+#ifndef CONV1_OUT_W
+#define CONV1_OUT_W CONV1_IN_W
+#endif
+#ifndef CONV1_OUT_H
+#define CONV1_OUT_H CONV1_IN_H
+#endif
+#define CONV1_IN_UNITS     (CONV1_IN_CHANNELS  * CONV1_IN_W  * CONV1_IN_H)
+#define CONV1_OUT_UNITS    (CONV1_OUT_CHANNELS * CONV1_OUT_W * CONV1_OUT_H)
 #define CONV1_WEIGHT_ELEMS (CONV1_OUT_CHANNELS * CONV1_IN_CHANNELS * CONV1_KERNEL_L * CONV1_KERNEL_L)
 
 
@@ -140,3 +161,5 @@ void alexnet_train(alexnet *net, int epochs);
 void alexnet_test(alexnet *net);
 void alexnet_inference(alexnet *net, const unsigned char *img_bytes);
 void compute_batch_metrics(const int *preds, const int *labels, int batchsize);
+
+#endif /* ALEXNET_H */

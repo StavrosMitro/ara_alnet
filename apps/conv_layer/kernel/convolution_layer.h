@@ -3,6 +3,8 @@
 // Description: interface of convolution layer
 // Author:      Haris Wang
 //
+#ifndef CONVOLUTION_LAYER_H
+#define CONVOLUTION_LAYER_H
 // #include <stdlib.h>
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
@@ -18,6 +20,12 @@
 #define CONV_MAX_IKK  (256 * 3 * 3)
 #define CONV_MAX_OC   256
 #define CONV_MAX_OWOH (32 * 32)
+
+// Size of the im2col scratch buffer for conv layer 1 (one image at a time).
+// Override via -DCONV1_XCOL_ELEMS=<value> when using non-default dimensions.
+#ifndef CONV1_XCOL_ELEMS
+#define CONV1_XCOL_ELEMS (32 * 32 * (3 * 3 * 3))
+#endif
 #define CONV_MAX_DXCOL (CONV_MAX_IKK * CONV_MAX_OWOH)
 #define CONV_MAX_DOCOPY (CONV_MAX_OC * CONV_MAX_OWOH)
 #define CONV_MAX_INTERNAL ((CONV_MAX_IKK + 7) / 8)
@@ -80,3 +88,5 @@ inline void free_conv_dweights(conv_op *op);
 
 inline void load_conv_weights(conv_op *op, float *w_array, float *b_array);
 inline void save_conv_weights(conv_op *op);
+
+#endif /* CONVOLUTION_LAYER_H */

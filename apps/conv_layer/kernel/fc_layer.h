@@ -3,6 +3,8 @@
 // Description: interface of full connected layer
 // Author:      Haris Wang
 //
+#ifndef FC_LAYER_H
+#define FC_LAYER_H
 // #include <stdlib.h>
 
 #include <stdint.h>
@@ -45,3 +47,5 @@ inline void free_fc_dweights(fc_op *op);
 
 inline void load_fc_weights(fc_op *op, float *w_array, float *b_array);
 inline void save_fc_weights(fc_op *op );
+
+#endif /* FC_LAYER_H */

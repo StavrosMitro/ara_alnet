@@ -250,7 +250,7 @@ void precompute_img2col_offsets_static(const conv_op *op)
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-static float conv1_xcol_scratch[32 * 32 * (3 * 3 * 3)];
+static float conv1_xcol_scratch[CONV1_XCOL_ELEMS];
 static float conv2_xcol_scratch[16 * 16 * (64 * 3 * 3)];
 static float conv3_xcol_scratch[8 * 8 * (128 * 3 * 3)];
 static float conv4_xcol_scratch[8 * 8 * (256 * 3 * 3)];
