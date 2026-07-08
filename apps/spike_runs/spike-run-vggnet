@@ -1,0 +1,2101 @@
+VGGMini FP16/RVV fine-tune — batchsize=32  epochs=10
+batchsize in setup: 32
+Trainable layers:
+  conv1: 0
+  conv1b: 0
+  conv2: 0
+  conv2b: 0
+  conv3: 0
+  conv3b: 0
+  conv4: 0
+  conv4b: 0
+  conv5: 0
+  conv5b: 0
+  bn1: 0
+  bn1b: 0
+  bn2: 0
+  bn2b: 0
+  bn3: 0
+  bn3b: 0
+  bn4: 0
+  bn4b: 0
+  bn5: 0
+  bn5b: 0
+  bn6: 1
+  bn7: 1
+  fc1: 1
+  fc2: 1
+  fc3: 1
+Total trainable layers: 5/25
+
+--- Baseline accuracy (pre fine-tune, FP16) ---
+batch accuracy:  0.4375  (14 / 32 correct)
+batch macro F1:  0.2791  (over 43 classes)
+
+--- Fine-tuning FC head (FP16/RVV) over all images ---
+alexnet_train_16: lr=0.01000  wd=0.00050  epochs=10  steps/epoch=313  dataset=10000
+>>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
+batch accuracy:  0.4375  (14 / 32 correct)
+batch macro F1:  0.2791  (over 43 classes)
+Test Update: dw=0.001391, update_val=0.000001
+Test Update: dw=-0.000098, update_val=-0.000000
+Test Update: dw=-0.000765, update_val=-0.000001
+cycles[e1 b1/313]: prep=5472394 fwd=281859694 pred+metric=502862 loss=956281 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=727141 bwd_wrapper=5891297
+epoch 1 step 1/313 loss: 2.437891
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1938  (over 43 classes)
+Test Update: dw=-0.059113, update_val=-0.000059
+Test Update: dw=-0.052826, update_val=-0.000053
+Test Update: dw=-0.006607, update_val=-0.000007
+cycles[e1 b2/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957020 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736478 bwd_wrapper=5901296
+epoch 1 step 2/313 loss: 2.524487
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1870  (over 41 classes)
+Test Update: dw=0.001179, update_val=0.000001
+Test Update: dw=0.002041, update_val=0.000002
+Test Update: dw=0.000143, update_val=0.000000
+cycles[e1 b3/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956626 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706875 bwd_wrapper=5871297
+epoch 1 step 3/313 loss: 3.233364
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1389  (over 48 classes)
+Test Update: dw=0.028503, update_val=0.000028
+Test Update: dw=0.017090, update_val=0.000017
+Test Update: dw=0.000849, update_val=0.000001
+cycles[e1 b4/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957245 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706253 bwd_wrapper=5871297
+epoch 1 step 4/313 loss: 2.988621
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1473  (over 43 classes)
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=-0.000317, update_val=-0.000000
+Test Update: dw=0.000542, update_val=0.000001
+cycles[e1 b5/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957119 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716397 bwd_wrapper=5881297
+epoch 1 step 5/313 loss: 3.150946
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0593  (over 45 classes)
+Test Update: dw=0.000003, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000044, update_val=0.000000
+cycles[e1 b6/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956889 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706606 bwd_wrapper=5871302
+epoch 1 step 6/313 loss: 4.140530
+batch accuracy:  0.4688  (15 / 32 correct)
+batch macro F1:  0.2870  (over 36 classes)
+Test Update: dw=0.000038, update_val=0.000000
+Test Update: dw=-0.003700, update_val=-0.000004
+Test Update: dw=-0.000114, update_val=-0.000000
+cycles[e1 b7/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956566 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726913 bwd_wrapper=5891296
+epoch 1 step 7/313 loss: 2.749709
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1704  (over 45 classes)
+Test Update: dw=0.000567, update_val=0.000001
+Test Update: dw=0.000739, update_val=0.000001
+Test Update: dw=0.000083, update_val=0.000000
+cycles[e1 b8/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956906 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706592 bwd_wrapper=5871297
+epoch 1 step 8/313 loss: 3.216686
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2297  (over 37 classes)
+Test Update: dw=0.000067, update_val=0.000000
+Test Update: dw=-0.000022, update_val=0.000000
+Test Update: dw=-0.000006, update_val=0.000000
+cycles[e1 b9/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956627 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716881 bwd_wrapper=5881297
+epoch 1 step 9/313 loss: 3.332414
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2074  (over 45 classes)
+Test Update: dw=0.000002, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=-0.000002, update_val=0.000000
+cycles[e1 b10/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956387 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712123 bwd_wrapper=5876301
+epoch 1 step 10/313 loss: 2.915043
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1748  (over 41 classes)
+Test Update: dw=0.000252, update_val=0.000000
+Test Update: dw=-0.000186, update_val=-0.000000
+Test Update: dw=-0.000075, update_val=-0.000000
+cycles[e1 b11/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956719 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726756 bwd_wrapper=5891296
+epoch 1 step 11/313 loss: 3.723241
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2051  (over 39 classes)
+Test Update: dw=0.000018, update_val=0.000000
+Test Update: dw=-0.009499, update_val=-0.000009
+Test Update: dw=-0.000237, update_val=-0.000000
+cycles[e1 b12/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956506 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726961 bwd_wrapper=5891298
+epoch 1 step 12/313 loss: 2.450295
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2519  (over 36 classes)
+Test Update: dw=0.000820, update_val=0.000001
+Test Update: dw=0.001111, update_val=0.000001
+Test Update: dw=0.000365, update_val=0.000000
+cycles[e1 b13/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956370 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707174 bwd_wrapper=5871296
+epoch 1 step 13/313 loss: 3.599614
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1545  (over 41 classes)
+Test Update: dw=-0.059418, update_val=-0.000059
+Test Update: dw=-0.010162, update_val=-0.000010
+Test Update: dw=-0.000835, update_val=-0.000001
+cycles[e1 b14/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956762 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736719 bwd_wrapper=5901297
+epoch 1 step 14/313 loss: 3.090726
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1124  (over 43 classes)
+Test Update: dw=0.001191, update_val=0.000001
+Test Update: dw=0.003393, update_val=0.000003
+Test Update: dw=0.001516, update_val=0.000001
+cycles[e1 b15/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956807 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706674 bwd_wrapper=5871296
+epoch 1 step 15/313 loss: 3.816895
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1706  (over 42 classes)
+Test Update: dw=0.000006, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000020, update_val=0.000000
+cycles[e1 b16/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956620 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706874 bwd_wrapper=5871297
+epoch 1 step 16/313 loss: 3.412249
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1179  (over 41 classes)
+Test Update: dw=0.008842, update_val=0.000009
+Test Update: dw=0.001294, update_val=0.000001
+Test Update: dw=0.000252, update_val=0.000000
+cycles[e1 b17/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956642 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706777 bwd_wrapper=5871298
+epoch 1 step 17/313 loss: 4.109800
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2302  (over 42 classes)
+Test Update: dw=0.000377, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000000, update_val=0.000000
+cycles[e1 b18/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956500 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712021 bwd_wrapper=5876297
+epoch 1 step 18/313 loss: 3.201132
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1921  (over 42 classes)
+Test Update: dw=0.000256, update_val=0.000000
+Test Update: dw=0.000039, update_val=0.000000
+Test Update: dw=0.000062, update_val=0.000000
+cycles[e1 b19/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956799 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706661 bwd_wrapper=5871297
+epoch 1 step 19/313 loss: 3.737353
+batch accuracy:  0.4062  (13 / 32 correct)
+batch macro F1:  0.2792  (over 40 classes)
+Test Update: dw=0.006508, update_val=0.000006
+Test Update: dw=-0.001575, update_val=-0.000002
+Test Update: dw=-0.000920, update_val=-0.000001
+cycles[e1 b20/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956503 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726963 bwd_wrapper=5891297
+epoch 1 step 20/313 loss: 3.068674
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1744  (over 39 classes)
+Test Update: dw=0.027832, update_val=0.000028
+Test Update: dw=-0.000182, update_val=-0.000000
+Test Update: dw=-0.000097, update_val=-0.000000
+cycles[e1 b21/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956420 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=722103 bwd_wrapper=5886297
+epoch 1 step 21/313 loss: 3.291716
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1860  (over 43 classes)
+Test Update: dw=0.003719, update_val=0.000004
+Test Update: dw=0.003044, update_val=0.000003
+Test Update: dw=0.001982, update_val=0.000002
+cycles[e1 b22/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956711 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706760 bwd_wrapper=5871298
+epoch 1 step 22/313 loss: 3.223030
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1860  (over 43 classes)
+Test Update: dw=0.000316, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000002, update_val=0.000000
+cycles[e1 b23/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956326 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707127 bwd_wrapper=5871301
+epoch 1 step 23/313 loss: 3.499888
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1250  (over 40 classes)
+Test Update: dw=0.006023, update_val=0.000006
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b24/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956756 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716773 bwd_wrapper=5881302
+epoch 1 step 24/313 loss: 3.852418
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2276  (over 41 classes)
+Test Update: dw=0.080688, update_val=0.000081
+Test Update: dw=-0.000676, update_val=-0.000001
+Test Update: dw=0.000121, update_val=0.000000
+cycles[e1 b25/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=957040 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716468 bwd_wrapper=5881300
+epoch 1 step 25/313 loss: 3.620541
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1154  (over 39 classes)
+Test Update: dw=0.000060, update_val=0.000000
+Test Update: dw=-0.003641, update_val=-0.000004
+Test Update: dw=-0.000191, update_val=-0.000000
+cycles[e1 b26/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956683 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726805 bwd_wrapper=5891296
+epoch 1 step 26/313 loss: 4.113539
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1174  (over 44 classes)
+Test Update: dw=0.000009, update_val=0.000000
+Test Update: dw=-0.002228, update_val=-0.000002
+Test Update: dw=-0.000136, update_val=-0.000000
+cycles[e1 b27/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957055 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726464 bwd_wrapper=5891301
+epoch 1 step 27/313 loss: 4.391631
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1250  (over 48 classes)
+Test Update: dw=0.000660, update_val=0.000001
+Test Update: dw=-0.001524, update_val=-0.000002
+Test Update: dw=0.000151, update_val=0.000000
+cycles[e1 b28/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956892 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716652 bwd_wrapper=5881297
+epoch 1 step 28/313 loss: 3.772554
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1630  (over 45 classes)
+Test Update: dw=0.000886, update_val=0.000001
+Test Update: dw=0.000104, update_val=0.000000
+Test Update: dw=0.000078, update_val=0.000000
+cycles[e1 b29/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956827 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706646 bwd_wrapper=5871297
+epoch 1 step 29/313 loss: 3.847548
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1792  (over 40 classes)
+Test Update: dw=0.001047, update_val=0.000001
+Test Update: dw=-0.001383, update_val=-0.000001
+Test Update: dw=-0.000254, update_val=-0.000000
+cycles[e1 b30/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956774 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726681 bwd_wrapper=5891305
+epoch 1 step 30/313 loss: 3.481199
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0851  (over 47 classes)
+Test Update: dw=0.001728, update_val=0.000002
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000003, update_val=0.000000
+cycles[e1 b31/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957006 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711510 bwd_wrapper=5876300
+epoch 1 step 31/313 loss: 4.104909
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1550  (over 43 classes)
+Test Update: dw=0.000009, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000188, update_val=0.000000
+cycles[e1 b32/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956632 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706883 bwd_wrapper=5871297
+epoch 1 step 32/313 loss: 3.435573
+batch accuracy:  0.3750  (12 / 32 correct)
+batch macro F1:  0.2561  (over 41 classes)
+Test Update: dw=-0.001753, update_val=-0.000002
+Test Update: dw=-0.000102, update_val=-0.000000
+Test Update: dw=-0.000673, update_val=-0.000001
+cycles[e1 b33/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956660 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736850 bwd_wrapper=5901302
+epoch 1 step 33/313 loss: 2.480875
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0698  (over 43 classes)
+Test Update: dw=0.045044, update_val=0.000045
+Test Update: dw=-0.000618, update_val=-0.000001
+Test Update: dw=-0.000125, update_val=-0.000000
+cycles[e1 b34/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956918 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726588 bwd_wrapper=5891305
+epoch 1 step 34/313 loss: 4.262107
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1642  (over 41 classes)
+Test Update: dw=0.000237, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000001, update_val=0.000000
+cycles[e1 b35/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956817 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711707 bwd_wrapper=5876302
+epoch 1 step 35/313 loss: 2.880483
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1396  (over 37 classes)
+Test Update: dw=0.006615, update_val=0.000007
+Test Update: dw=0.000338, update_val=0.000000
+Test Update: dw=-0.000114, update_val=-0.000000
+cycles[e1 b36/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956881 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716618 bwd_wrapper=5881309
+epoch 1 step 36/313 loss: 4.287080
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1752  (over 39 classes)
+Test Update: dw=0.003536, update_val=0.000004
+Test Update: dw=0.000093, update_val=0.000000
+Test Update: dw=0.000004, update_val=0.000000
+cycles[e1 b37/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956821 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706687 bwd_wrapper=5871301
+epoch 1 step 37/313 loss: 3.278518
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2436  (over 39 classes)
+Test Update: dw=0.001527, update_val=0.000002
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000059, update_val=-0.000000
+cycles[e1 b38/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956382 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=717129 bwd_wrapper=5881298
+epoch 1 step 38/313 loss: 3.947412
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2125  (over 40 classes)
+Test Update: dw=0.000021, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000331, update_val=0.000000
+cycles[e1 b39/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956591 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706886 bwd_wrapper=5871297
+epoch 1 step 39/313 loss: 3.889015
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 44 classes)
+Test Update: dw=0.005489, update_val=0.000005
+Test Update: dw=-0.008957, update_val=-0.000009
+Test Update: dw=-0.000735, update_val=-0.000001
+cycles[e1 b40/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956470 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=727011 bwd_wrapper=5891297
+epoch 1 step 40/313 loss: 4.317952
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1583  (over 40 classes)
+Test Update: dw=0.004723, update_val=0.000005
+Test Update: dw=0.000628, update_val=0.000001
+Test Update: dw=-0.000099, update_val=-0.000000
+cycles[e1 b41/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956673 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716825 bwd_wrapper=5881301
+epoch 1 step 41/313 loss: 3.610162
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1838  (over 39 classes)
+Test Update: dw=0.001453, update_val=0.000001
+Test Update: dw=-0.000006, update_val=0.000000
+Test Update: dw=-0.000002, update_val=0.000000
+cycles[e1 b42/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956582 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716916 bwd_wrapper=5881296
+epoch 1 step 42/313 loss: 3.874066
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1642  (over 41 classes)
+Test Update: dw=0.001187, update_val=0.000001
+Test Update: dw=-0.000583, update_val=-0.000001
+Test Update: dw=-0.000102, update_val=-0.000000
+cycles[e1 b43/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956720 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726780 bwd_wrapper=5891300
+epoch 1 step 43/313 loss: 3.999985
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2197  (over 44 classes)
+Test Update: dw=0.002069, update_val=0.000002
+Test Update: dw=0.000919, update_val=0.000001
+Test Update: dw=0.000566, update_val=0.000001
+cycles[e1 b44/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956918 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706634 bwd_wrapper=5871297
+epoch 1 step 44/313 loss: 3.518423
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1159  (over 46 classes)
+Test Update: dw=0.001030, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000018, update_val=0.000000
+cycles[e1 b45/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957095 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711387 bwd_wrapper=5876298
+epoch 1 step 45/313 loss: 4.196414
+batch accuracy:  0.4062  (13 / 32 correct)
+batch macro F1:  0.2778  (over 42 classes)
+Test Update: dw=0.000699, update_val=0.000001
+Test Update: dw=0.003746, update_val=0.000004
+Test Update: dw=0.000231, update_val=0.000000
+cycles[e1 b46/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956328 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707146 bwd_wrapper=5871300
+epoch 1 step 46/313 loss: 3.237702
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.0993  (over 47 classes)
+Test Update: dw=0.003891, update_val=0.000004
+Test Update: dw=0.006191, update_val=0.000006
+Test Update: dw=0.002100, update_val=0.000002
+cycles[e1 b47/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956986 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706484 bwd_wrapper=5871300
+epoch 1 step 47/313 loss: 3.574507
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1333  (over 40 classes)
+Test Update: dw=-0.130493, update_val=-0.000131
+Test Update: dw=0.000628, update_val=0.000001
+Test Update: dw=0.002003, update_val=0.000002
+cycles[e1 b48/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957031 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716444 bwd_wrapper=5881300
+epoch 1 step 48/313 loss: 3.536588
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0958  (over 40 classes)
+Test Update: dw=0.001218, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000101, update_val=0.000000
+cycles[e1 b49/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957047 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706406 bwd_wrapper=5871301
+epoch 1 step 49/313 loss: 3.715467
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2042  (over 40 classes)
+Test Update: dw=0.000003, update_val=0.000000
+Test Update: dw=0.000147, update_val=0.000000
+Test Update: dw=0.000012, update_val=0.000000
+cycles[e1 b50/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956759 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706744 bwd_wrapper=5871297
+epoch 1 step 50/313 loss: 3.855876
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0688  (over 46 classes)
+Test Update: dw=0.004116, update_val=0.000004
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000004, update_val=0.000000
+cycles[e1 b51/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957122 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706346 bwd_wrapper=5871297
+epoch 1 step 51/313 loss: 5.050606
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0780  (over 47 classes)
+Test Update: dw=0.000415, update_val=0.000000
+Test Update: dw=0.000054, update_val=0.000000
+Test Update: dw=-0.000023, update_val=0.000000
+cycles[e1 b52/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957343 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711113 bwd_wrapper=5876297
+epoch 1 step 52/313 loss: 4.108723
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0926  (over 45 classes)
+Test Update: dw=0.004551, update_val=0.000005
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000008, update_val=0.000000
+cycles[e1 b53/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956485 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712010 bwd_wrapper=5876301
+epoch 1 step 53/313 loss: 3.946846
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1838  (over 39 classes)
+Test Update: dw=0.000786, update_val=0.000001
+Test Update: dw=0.000145, update_val=0.000000
+Test Update: dw=0.000299, update_val=0.000000
+cycles[e1 b54/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956442 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707049 bwd_wrapper=5871300
+epoch 1 step 54/313 loss: 3.660344
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1473  (over 43 classes)
+Test Update: dw=0.032593, update_val=0.000033
+Test Update: dw=0.005363, update_val=0.000005
+Test Update: dw=0.000595, update_val=0.000001
+cycles[e1 b55/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956532 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706939 bwd_wrapper=5871297
+epoch 1 step 55/313 loss: 3.505600
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1028  (over 47 classes)
+Test Update: dw=0.000271, update_val=0.000000
+Test Update: dw=0.000413, update_val=0.000000
+Test Update: dw=-0.000019, update_val=0.000000
+cycles[e1 b56/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956814 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711680 bwd_wrapper=5876300
+epoch 1 step 56/313 loss: 3.143996
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1626  (over 41 classes)
+Test Update: dw=0.017471, update_val=0.000017
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000106, update_val=0.000000
+cycles[e1 b57/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956740 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706738 bwd_wrapper=5871300
+epoch 1 step 57/313 loss: 2.988541
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1259  (over 45 classes)
+Test Update: dw=-0.060211, update_val=-0.000060
+Test Update: dw=0.000857, update_val=0.000001
+Test Update: dw=0.000007, update_val=0.000000
+cycles[e1 b58/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957072 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716426 bwd_wrapper=5881296
+epoch 1 step 58/313 loss: 4.061672
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1057  (over 41 classes)
+Test Update: dw=0.030426, update_val=0.000030
+Test Update: dw=-0.002022, update_val=-0.000002
+Test Update: dw=-0.000621, update_val=-0.000001
+cycles[e1 b59/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957208 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726293 bwd_wrapper=5891301
+epoch 1 step 59/313 loss: 3.609603
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.1875  (over 40 classes)
+Test Update: dw=0.000231, update_val=0.000000
+Test Update: dw=-0.009544, update_val=-0.000010
+Test Update: dw=-0.000457, update_val=-0.000000
+cycles[e1 b60/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956726 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726725 bwd_wrapper=5891300
+epoch 1 step 60/313 loss: 3.199946
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0889  (over 45 classes)
+Test Update: dw=0.000090, update_val=0.000000
+Test Update: dw=0.003952, update_val=0.000004
+Test Update: dw=0.000805, update_val=0.000001
+cycles[e1 b61/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957164 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706333 bwd_wrapper=5871302
+epoch 1 step 61/313 loss: 4.144173
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1707  (over 41 classes)
+Test Update: dw=0.000108, update_val=0.000000
+Test Update: dw=0.000002, update_val=0.000000
+Test Update: dw=-0.000021, update_val=0.000000
+cycles[e1 b62/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957005 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711388 bwd_wrapper=5876302
+epoch 1 step 62/313 loss: 3.986735
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1190  (over 42 classes)
+Test Update: dw=0.004463, update_val=0.000004
+Test Update: dw=0.000975, update_val=0.000001
+Test Update: dw=0.000212, update_val=0.000000
+cycles[e1 b63/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957231 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706244 bwd_wrapper=5871306
+epoch 1 step 63/313 loss: 3.898249
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1550  (over 43 classes)
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=-0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+cycles[e1 b64/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956780 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711679 bwd_wrapper=5876300
+epoch 1 step 64/313 loss: 4.120210
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1232  (over 46 classes)
+Test Update: dw=0.001118, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000123, update_val=-0.000000
+cycles[e1 b65/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957014 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716490 bwd_wrapper=5881301
+epoch 1 step 65/313 loss: 3.956852
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1418  (over 47 classes)
+Test Update: dw=0.000030, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000238, update_val=-0.000000
+cycles[e1 b66/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957091 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711426 bwd_wrapper=5876300
+epoch 1 step 66/313 loss: 4.155225
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1015  (over 44 classes)
+Test Update: dw=0.014198, update_val=0.000014
+Test Update: dw=0.001015, update_val=0.000001
+Test Update: dw=0.000530, update_val=0.000001
+cycles[e1 b67/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957089 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=701452 bwd_wrapper=5866305
+epoch 1 step 67/313 loss: 3.378265
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1629  (over 44 classes)
+Test Update: dw=0.000057, update_val=0.000000
+Test Update: dw=-0.006016, update_val=-0.000006
+Test Update: dw=-0.000247, update_val=-0.000000
+cycles[e1 b68/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956728 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726767 bwd_wrapper=5891325
+epoch 1 step 68/313 loss: 3.657058
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1078  (over 47 classes)
+Test Update: dw=0.000002, update_val=0.000000
+Test Update: dw=-0.007820, update_val=-0.000008
+Test Update: dw=0.000228, update_val=0.000000
+cycles[e1 b69/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957285 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716212 bwd_wrapper=5881325
+epoch 1 step 69/313 loss: 4.118979
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0682  (over 44 classes)
+Test Update: dw=0.000021, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000155, update_val=-0.000000
+cycles[e1 b70/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957310 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716180 bwd_wrapper=5881332
+epoch 1 step 70/313 loss: 4.048373
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1318  (over 43 classes)
+Test Update: dw=-0.019302, update_val=-0.000019
+Test Update: dw=-0.000674, update_val=-0.000001
+Test Update: dw=0.000064, update_val=0.000000
+cycles[e1 b71/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957271 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726227 bwd_wrapper=5891340
+epoch 1 step 71/313 loss: 3.697320
+batch accuracy:  0.0625  (2 / 32 correct)
+batch macro F1:  0.0379  (over 44 classes)
+Test Update: dw=0.004566, update_val=0.000005
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b72/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957177 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706292 bwd_wrapper=5871337
+epoch 1 step 72/313 loss: 4.004807
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1395  (over 43 classes)
+Test Update: dw=0.000605, update_val=0.000001
+Test Update: dw=-0.000005, update_val=0.000000
+Test Update: dw=-0.000118, update_val=-0.000000
+cycles[e1 b73/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956510 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721971 bwd_wrapper=5886345
+epoch 1 step 73/313 loss: 3.444418
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1379  (over 44 classes)
+Test Update: dw=0.000940, update_val=0.000001
+Test Update: dw=0.000513, update_val=0.000001
+Test Update: dw=0.000097, update_val=0.000000
+cycles[e1 b74/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956597 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706942 bwd_wrapper=5871320
+epoch 1 step 74/313 loss: 3.052002
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1370  (over 45 classes)
+Test Update: dw=-0.025894, update_val=-0.000026
+Test Update: dw=-0.000862, update_val=-0.000001
+Test Update: dw=-0.000058, update_val=-0.000000
+cycles[e1 b75/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956668 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736839 bwd_wrapper=5901321
+epoch 1 step 75/313 loss: 3.693301
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1585  (over 41 classes)
+Test Update: dw=0.000009, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000054, update_val=0.000000
+cycles[e1 b76/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956995 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706466 bwd_wrapper=5871336
+epoch 1 step 76/313 loss: 4.030982
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1504  (over 41 classes)
+Test Update: dw=0.010025, update_val=0.000010
+Test Update: dw=0.002310, update_val=0.000002
+Test Update: dw=0.000105, update_val=0.000000
+cycles[e1 b77/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956852 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706645 bwd_wrapper=5871333
+epoch 1 step 77/313 loss: 4.127130
+batch accuracy:  0.0625  (2 / 32 correct)
+batch macro F1:  0.0379  (over 44 classes)
+Test Update: dw=0.071045, update_val=0.000071
+Test Update: dw=0.000165, update_val=0.000000
+Test Update: dw=-0.000303, update_val=-0.000000
+cycles[e1 b78/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956617 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716844 bwd_wrapper=5881334
+epoch 1 step 78/313 loss: 4.677754
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1705  (over 43 classes)
+Test Update: dw=-0.076904, update_val=-0.000077
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000043, update_val=-0.000000
+cycles[e1 b79/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956414 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=727037 bwd_wrapper=5891325
+epoch 1 step 79/313 loss: 3.829984
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0972  (over 48 classes)
+Test Update: dw=0.000045, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000004, update_val=0.000000
+cycles[e1 b80/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956706 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706772 bwd_wrapper=5871330
+epoch 1 step 80/313 loss: 4.240166
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0873  (over 42 classes)
+Test Update: dw=0.002176, update_val=0.000002
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000087, update_val=-0.000000
+cycles[e1 b81/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956588 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716909 bwd_wrapper=5881333
+epoch 1 step 81/313 loss: 3.606813
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2033  (over 41 classes)
+Test Update: dw=0.000006, update_val=0.000000
+Test Update: dw=0.000347, update_val=0.000000
+Test Update: dw=0.000013, update_val=0.000000
+cycles[e1 b82/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957047 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706464 bwd_wrapper=5871332
+epoch 1 step 82/313 loss: 4.045512
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1429  (over 49 classes)
+Test Update: dw=0.000059, update_val=0.000000
+Test Update: dw=0.000131, update_val=0.000000
+Test Update: dw=-0.000073, update_val=-0.000000
+cycles[e1 b83/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956771 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716747 bwd_wrapper=5881338
+epoch 1 step 83/313 loss: 3.977916
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1477  (over 44 classes)
+Test Update: dw=0.001276, update_val=0.000001
+Test Update: dw=-0.000669, update_val=-0.000001
+Test Update: dw=0.000096, update_val=0.000000
+cycles[e1 b84/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956925 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716579 bwd_wrapper=5881326
+epoch 1 step 84/313 loss: 4.243420
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1591  (over 44 classes)
+Test Update: dw=0.000086, update_val=0.000000
+Test Update: dw=0.002821, update_val=0.000003
+Test Update: dw=0.000579, update_val=0.000001
+cycles[e1 b85/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956982 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706473 bwd_wrapper=5871337
+epoch 1 step 85/313 loss: 4.184661
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1395  (over 43 classes)
+Test Update: dw=0.005386, update_val=0.000005
+Test Update: dw=-0.006905, update_val=-0.000007
+Test Update: dw=0.000181, update_val=0.000000
+cycles[e1 b86/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956815 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716707 bwd_wrapper=5881338
+epoch 1 step 86/313 loss: 4.415856
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1429  (over 42 classes)
+Test Update: dw=0.004051, update_val=0.000004
+Test Update: dw=0.007896, update_val=0.000008
+Test Update: dw=0.001056, update_val=0.000001
+cycles[e1 b87/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956721 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706844 bwd_wrapper=5871330
+epoch 1 step 87/313 loss: 3.612633
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1410  (over 39 classes)
+Test Update: dw=0.000100, update_val=0.000000
+Test Update: dw=0.000196, update_val=0.000000
+Test Update: dw=-0.000010, update_val=0.000000
+cycles[e1 b88/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956592 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711892 bwd_wrapper=5876328
+epoch 1 step 88/313 loss: 4.067112
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 44 classes)
+Test Update: dw=0.003956, update_val=0.000004
+Test Update: dw=0.059357, update_val=0.000059
+Test Update: dw=0.003254, update_val=0.000003
+cycles[e1 b89/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956657 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706872 bwd_wrapper=5871341
+epoch 1 step 89/313 loss: 4.209733
+batch accuracy:  0.3750  (12 / 32 correct)
+batch macro F1:  0.2521  (over 39 classes)
+Test Update: dw=0.005966, update_val=0.000006
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b90/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956892 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706566 bwd_wrapper=5871338
+epoch 1 step 90/313 loss: 3.346895
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0889  (over 45 classes)
+Test Update: dw=0.000058, update_val=0.000000
+Test Update: dw=-0.000144, update_val=-0.000000
+Test Update: dw=-0.000050, update_val=-0.000000
+cycles[e1 b91/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956886 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726601 bwd_wrapper=5891349
+epoch 1 step 91/313 loss: 4.411937
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0947  (over 44 classes)
+Test Update: dw=0.000821, update_val=0.000001
+Test Update: dw=0.000848, update_val=0.000001
+Test Update: dw=-0.001082, update_val=-0.000001
+cycles[e1 b92/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957133 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716388 bwd_wrapper=5881338
+epoch 1 step 92/313 loss: 3.986469
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1016  (over 41 classes)
+Test Update: dw=0.014587, update_val=0.000015
+Test Update: dw=-0.021133, update_val=-0.000021
+Test Update: dw=-0.000458, update_val=-0.000000
+cycles[e1 b93/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956748 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726801 bwd_wrapper=5891334
+epoch 1 step 93/313 loss: 3.995477
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1884  (over 46 classes)
+Test Update: dw=0.018753, update_val=0.000019
+Test Update: dw=-0.005688, update_val=-0.000006
+Test Update: dw=-0.000147, update_val=-0.000000
+cycles[e1 b94/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956507 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726979 bwd_wrapper=5891330
+epoch 1 step 94/313 loss: 3.477452
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1786  (over 42 classes)
+Test Update: dw=-0.003565, update_val=-0.000004
+Test Update: dw=0.003227, update_val=0.000003
+Test Update: dw=0.000964, update_val=0.000001
+cycles[e1 b95/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956893 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716597 bwd_wrapper=5881314
+epoch 1 step 95/313 loss: 4.268751
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1894  (over 44 classes)
+Test Update: dw=-0.046112, update_val=-0.000046
+Test Update: dw=-0.001129, update_val=-0.000001
+Test Update: dw=-0.000264, update_val=-0.000000
+cycles[e1 b96/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956654 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736827 bwd_wrapper=5901312
+epoch 1 step 96/313 loss: 2.973412
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0754  (over 42 classes)
+Test Update: dw=0.004295, update_val=0.000004
+Test Update: dw=0.008789, update_val=0.000009
+Test Update: dw=0.000243, update_val=0.000000
+cycles[e1 b97/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956983 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706463 bwd_wrapper=5871336
+epoch 1 step 97/313 loss: 5.269991
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1256  (over 43 classes)
+Test Update: dw=0.000008, update_val=0.000000
+Test Update: dw=-0.000232, update_val=-0.000000
+Test Update: dw=-0.000204, update_val=-0.000000
+cycles[e1 b98/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956985 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726507 bwd_wrapper=5891344
+epoch 1 step 98/313 loss: 3.804550
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1171  (over 41 classes)
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=-0.000005, update_val=0.000000
+Test Update: dw=-0.000010, update_val=0.000000
+cycles[e1 b99/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956894 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716582 bwd_wrapper=5881342
+epoch 1 step 99/313 loss: 4.172313
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1704  (over 45 classes)
+Test Update: dw=0.000693, update_val=0.000001
+Test Update: dw=0.000006, update_val=0.000000
+Test Update: dw=0.000082, update_val=0.000000
+cycles[e1 b100/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956895 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706602 bwd_wrapper=5871329
+epoch 1 step 100/313 loss: 3.423949
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1786  (over 39 classes)
+Test Update: dw=0.044098, update_val=0.000044
+Test Update: dw=0.002478, update_val=0.000003
+Test Update: dw=0.000025, update_val=0.000000
+cycles[e1 b101/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956804 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706720 bwd_wrapper=5871325
+epoch 1 step 101/313 loss: 2.962537
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1288  (over 44 classes)
+Test Update: dw=0.002815, update_val=0.000003
+Test Update: dw=-0.001031, update_val=-0.000001
+Test Update: dw=-0.000370, update_val=-0.000000
+cycles[e1 b102/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956712 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726793 bwd_wrapper=5891345
+epoch 1 step 102/313 loss: 3.836592
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0733  (over 50 classes)
+Test Update: dw=0.000963, update_val=0.000001
+Test Update: dw=-0.000013, update_val=0.000000
+Test Update: dw=0.000002, update_val=0.000000
+cycles[e1 b103/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956728 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711762 bwd_wrapper=5876325
+epoch 1 step 103/313 loss: 3.990546
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1542  (over 40 classes)
+Test Update: dw=0.003740, update_val=0.000004
+Test Update: dw=0.000287, update_val=0.000000
+Test Update: dw=-0.000107, update_val=-0.000000
+cycles[e1 b104/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956446 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=717010 bwd_wrapper=5881330
+epoch 1 step 104/313 loss: 3.442829
+batch accuracy:  0.0625  (2 / 32 correct)
+batch macro F1:  0.0362  (over 46 classes)
+Test Update: dw=0.001851, update_val=0.000002
+Test Update: dw=0.002569, update_val=0.000003
+Test Update: dw=0.000681, update_val=0.000001
+cycles[e1 b105/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956961 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706487 bwd_wrapper=5871317
+epoch 1 step 105/313 loss: 4.917906
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1067  (over 35 classes)
+Test Update: dw=0.002184, update_val=0.000002
+Test Update: dw=-0.000180, update_val=-0.000000
+Test Update: dw=-0.001106, update_val=-0.000001
+cycles[e1 b106/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957063 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726435 bwd_wrapper=5891334
+epoch 1 step 106/313 loss: 4.455094
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0650  (over 41 classes)
+Test Update: dw=0.001331, update_val=0.000001
+Test Update: dw=0.002666, update_val=0.000003
+Test Update: dw=0.000097, update_val=0.000000
+cycles[e1 b107/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956590 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706884 bwd_wrapper=5871348
+epoch 1 step 107/313 loss: 4.478316
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0638  (over 47 classes)
+Test Update: dw=0.005367, update_val=0.000005
+Test Update: dw=-0.026138, update_val=-0.000026
+Test Update: dw=-0.001957, update_val=-0.000002
+cycles[e1 b108/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956602 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726878 bwd_wrapper=5891329
+epoch 1 step 108/313 loss: 4.052614
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2195  (over 41 classes)
+Test Update: dw=0.000015, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000014, update_val=0.000000
+cycles[e1 b109/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956338 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707141 bwd_wrapper=5871321
+epoch 1 step 109/313 loss: 3.528881
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2132  (over 43 classes)
+Test Update: dw=0.000111, update_val=0.000000
+Test Update: dw=0.003439, update_val=0.000003
+Test Update: dw=-0.000000, update_val=0.000000
+cycles[e1 b110/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956415 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712094 bwd_wrapper=5876329
+epoch 1 step 110/313 loss: 3.091886
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1008  (over 43 classes)
+Test Update: dw=0.013809, update_val=0.000014
+Test Update: dw=-0.001637, update_val=-0.000002
+Test Update: dw=0.000063, update_val=0.000000
+cycles[e1 b111/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956651 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716808 bwd_wrapper=5881325
+epoch 1 step 111/313 loss: 3.993160
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 44 classes)
+Test Update: dw=0.000804, update_val=0.000001
+Test Update: dw=0.000659, update_val=0.000001
+Test Update: dw=-0.000030, update_val=-0.000000
+cycles[e1 b112/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956556 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716962 bwd_wrapper=5881336
+epoch 1 step 112/313 loss: 4.086288
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1683  (over 40 classes)
+Test Update: dw=0.001875, update_val=0.000002
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000063, update_val=0.000000
+cycles[e1 b113/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956394 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707075 bwd_wrapper=5871333
+epoch 1 step 113/313 loss: 2.528953
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1357  (over 43 classes)
+Test Update: dw=0.000678, update_val=0.000001
+Test Update: dw=0.000729, update_val=0.000001
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b114/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956890 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716568 bwd_wrapper=5881353
+epoch 1 step 114/313 loss: 4.049777
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0985  (over 44 classes)
+Test Update: dw=-0.043762, update_val=-0.000044
+Test Update: dw=-0.000938, update_val=-0.000001
+Test Update: dw=-0.000448, update_val=-0.000000
+cycles[e1 b115/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957013 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736468 bwd_wrapper=5901340
+epoch 1 step 115/313 loss: 4.098597
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2421  (over 42 classes)
+Test Update: dw=0.003742, update_val=0.000004
+Test Update: dw=-0.000668, update_val=-0.000001
+Test Update: dw=0.000003, update_val=0.000000
+cycles[e1 b116/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956743 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716758 bwd_wrapper=5881334
+epoch 1 step 116/313 loss: 3.663732
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0922  (over 47 classes)
+Test Update: dw=0.002573, update_val=0.000003
+Test Update: dw=-0.001111, update_val=-0.000001
+Test Update: dw=-0.000345, update_val=-0.000000
+cycles[e1 b117/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956840 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726635 bwd_wrapper=5891324
+epoch 1 step 117/313 loss: 3.695432
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1447  (over 47 classes)
+Test Update: dw=-0.071228, update_val=-0.000071
+Test Update: dw=0.002323, update_val=0.000002
+Test Update: dw=0.000015, update_val=0.000000
+cycles[e1 b118/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956706 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716740 bwd_wrapper=5881340
+epoch 1 step 118/313 loss: 4.088241
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1240  (over 43 classes)
+Test Update: dw=-0.024261, update_val=-0.000024
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b119/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956722 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726749 bwd_wrapper=5891328
+epoch 1 step 119/313 loss: 4.513357
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1365  (over 42 classes)
+Test Update: dw=0.064514, update_val=0.000065
+Test Update: dw=-0.003428, update_val=-0.000003
+Test Update: dw=0.000010, update_val=0.000000
+cycles[e1 b120/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956533 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716948 bwd_wrapper=5881337
+epoch 1 step 120/313 loss: 4.923501
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0778  (over 45 classes)
+Test Update: dw=0.000887, update_val=0.000001
+Test Update: dw=0.000111, update_val=0.000000
+Test Update: dw=-0.000160, update_val=-0.000000
+cycles[e1 b121/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956514 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716971 bwd_wrapper=5881346
+epoch 1 step 121/313 loss: 4.621023
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2180  (over 37 classes)
+Test Update: dw=0.001248, update_val=0.000001
+Test Update: dw=-0.003263, update_val=-0.000003
+Test Update: dw=-0.000102, update_val=-0.000000
+cycles[e1 b122/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956596 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726881 bwd_wrapper=5891333
+epoch 1 step 122/313 loss: 2.491805
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0767  (over 40 classes)
+Test Update: dw=0.001690, update_val=0.000002
+Test Update: dw=-0.000960, update_val=-0.000001
+Test Update: dw=-0.000761, update_val=-0.000001
+cycles[e1 b123/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956951 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726546 bwd_wrapper=5891338
+epoch 1 step 123/313 loss: 4.163741
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1351  (over 37 classes)
+Test Update: dw=0.000123, update_val=0.000000
+Test Update: dw=-0.000315, update_val=-0.000000
+Test Update: dw=-0.000747, update_val=-0.000001
+cycles[e1 b124/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957095 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726405 bwd_wrapper=5891346
+epoch 1 step 124/313 loss: 3.799761
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0947  (over 44 classes)
+Test Update: dw=0.007828, update_val=0.000008
+Test Update: dw=0.003704, update_val=0.000004
+Test Update: dw=0.000178, update_val=0.000000
+cycles[e1 b125/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956915 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706573 bwd_wrapper=5871348
+epoch 1 step 125/313 loss: 4.349655
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1124  (over 43 classes)
+Test Update: dw=0.000976, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b126/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956878 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716588 bwd_wrapper=5881352
+epoch 1 step 126/313 loss: 4.483809
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1016  (over 41 classes)
+Test Update: dw=0.001174, update_val=0.000001
+Test Update: dw=-0.001450, update_val=-0.000001
+Test Update: dw=-0.000165, update_val=-0.000000
+cycles[e1 b127/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956894 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726599 bwd_wrapper=5891337
+epoch 1 step 127/313 loss: 4.864498
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0903  (over 48 classes)
+Test Update: dw=0.000567, update_val=0.000001
+Test Update: dw=-0.000043, update_val=-0.000000
+Test Update: dw=-0.000031, update_val=-0.000000
+cycles[e1 b128/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956897 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726555 bwd_wrapper=5891353
+epoch 1 step 128/313 loss: 3.489564
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2054  (over 43 classes)
+Test Update: dw=0.001328, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b129/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=957085 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706442 bwd_wrapper=5871325
+epoch 1 step 129/313 loss: 3.170989
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0720  (over 44 classes)
+Test Update: dw=0.000384, update_val=0.000000
+Test Update: dw=-0.004452, update_val=-0.000004
+Test Update: dw=-0.000336, update_val=-0.000000
+cycles[e1 b130/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956745 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726766 bwd_wrapper=5891325
+epoch 1 step 130/313 loss: 3.979746
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1593  (over 45 classes)
+Test Update: dw=0.001426, update_val=0.000001
+Test Update: dw=0.005413, update_val=0.000005
+Test Update: dw=0.000292, update_val=0.000000
+cycles[e1 b131/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956850 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706659 bwd_wrapper=5871313
+epoch 1 step 131/313 loss: 3.937504
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1545  (over 41 classes)
+Test Update: dw=0.000207, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000020, update_val=0.000000
+cycles[e1 b132/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956513 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707004 bwd_wrapper=5871333
+epoch 1 step 132/313 loss: 3.145412
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0667  (over 46 classes)
+Test Update: dw=-0.021347, update_val=-0.000021
+Test Update: dw=0.000439, update_val=0.000000
+Test Update: dw=0.000035, update_val=0.000000
+cycles[e1 b133/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957019 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716447 bwd_wrapper=5881326
+epoch 1 step 133/313 loss: 4.310729
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1439  (over 44 classes)
+Test Update: dw=-0.032867, update_val=-0.000033
+Test Update: dw=-0.000591, update_val=-0.000001
+Test Update: dw=0.000033, update_val=0.000000
+cycles[e1 b134/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956767 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726774 bwd_wrapper=5891331
+epoch 1 step 134/313 loss: 3.757969
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0976  (over 41 classes)
+Test Update: dw=0.010277, update_val=0.000010
+Test Update: dw=0.000220, update_val=0.000000
+Test Update: dw=0.000858, update_val=0.000001
+cycles[e1 b135/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956894 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706596 bwd_wrapper=5871401
+epoch 1 step 135/313 loss: 4.298793
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1325  (over 39 classes)
+Test Update: dw=0.001835, update_val=0.000002
+Test Update: dw=-0.000507, update_val=-0.000001
+Test Update: dw=-0.000253, update_val=-0.000000
+cycles[e1 b136/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956757 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726688 bwd_wrapper=5891420
+epoch 1 step 136/313 loss: 3.780391
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2176  (over 36 classes)
+Test Update: dw=0.000856, update_val=0.000001
+Test Update: dw=0.004688, update_val=0.000005
+Test Update: dw=0.000088, update_val=0.000000
+cycles[e1 b137/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956273 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707159 bwd_wrapper=5871357
+epoch 1 step 137/313 loss: 3.863221
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0903  (over 48 classes)
+Test Update: dw=0.009476, update_val=0.000009
+Test Update: dw=0.004501, update_val=0.000005
+Test Update: dw=-0.003193, update_val=-0.000003
+cycles[e1 b138/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956781 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716692 bwd_wrapper=5881404
+epoch 1 step 138/313 loss: 4.107615
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1389  (over 36 classes)
+Test Update: dw=0.000017, update_val=0.000000
+Test Update: dw=0.000967, update_val=0.000001
+Test Update: dw=-0.000043, update_val=-0.000000
+cycles[e1 b139/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956650 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716871 bwd_wrapper=5881389
+epoch 1 step 139/313 loss: 3.677509
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1382  (over 41 classes)
+Test Update: dw=0.003197, update_val=0.000003
+Test Update: dw=-0.000509, update_val=-0.000001
+Test Update: dw=-0.000157, update_val=-0.000000
+cycles[e1 b140/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957202 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726298 bwd_wrapper=5891397
+epoch 1 step 140/313 loss: 4.424318
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1591  (over 44 classes)
+Test Update: dw=0.001153, update_val=0.000001
+Test Update: dw=0.000107, update_val=0.000000
+Test Update: dw=0.000005, update_val=0.000000
+cycles[e1 b141/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957066 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706438 bwd_wrapper=5871397
+epoch 1 step 141/313 loss: 4.583758
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1087  (over 42 classes)
+Test Update: dw=0.001045, update_val=0.000001
+Test Update: dw=-0.003021, update_val=-0.000003
+Test Update: dw=-0.000373, update_val=-0.000000
+cycles[e1 b142/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956881 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726567 bwd_wrapper=5891397
+epoch 1 step 142/313 loss: 4.194682
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0942  (over 46 classes)
+Test Update: dw=0.000303, update_val=0.000000
+Test Update: dw=-0.000503, update_val=-0.000000
+Test Update: dw=-0.000230, update_val=-0.000000
+cycles[e1 b143/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957212 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726269 bwd_wrapper=5891392
+epoch 1 step 143/313 loss: 4.362656
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0778  (over 45 classes)
+Test Update: dw=0.000063, update_val=0.000000
+Test Update: dw=-0.000673, update_val=-0.000001
+Test Update: dw=-0.000232, update_val=-0.000000
+cycles[e1 b144/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957010 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726468 bwd_wrapper=5891441
+epoch 1 step 144/313 loss: 4.110197
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1054  (over 37 classes)
+Test Update: dw=0.013817, update_val=0.000014
+Test Update: dw=0.001585, update_val=0.000002
+Test Update: dw=0.000375, update_val=0.000000
+cycles[e1 b145/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956578 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706941 bwd_wrapper=5871394
+epoch 1 step 145/313 loss: 3.866151
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0853  (over 43 classes)
+Test Update: dw=-0.031113, update_val=-0.000031
+Test Update: dw=0.012672, update_val=0.000013
+Test Update: dw=0.000231, update_val=0.000000
+cycles[e1 b146/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956962 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716525 bwd_wrapper=5881374
+epoch 1 step 146/313 loss: 4.267592
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0659  (over 43 classes)
+Test Update: dw=0.009384, update_val=0.000009
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000146, update_val=0.000000
+cycles[e1 b147/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957144 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706342 bwd_wrapper=5871414
+epoch 1 step 147/313 loss: 4.814454
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1310  (over 42 classes)
+Test Update: dw=-0.002832, update_val=-0.000003
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000206, update_val=0.000000
+cycles[e1 b148/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957166 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716326 bwd_wrapper=5881397
+epoch 1 step 148/313 loss: 4.758657
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2248  (over 43 classes)
+Test Update: dw=-0.001677, update_val=-0.000002
+Test Update: dw=-0.000218, update_val=-0.000000
+Test Update: dw=0.000008, update_val=0.000000
+cycles[e1 b149/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956647 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726868 bwd_wrapper=5891384
+epoch 1 step 149/313 loss: 2.824009
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1421  (over 42 classes)
+Test Update: dw=0.001779, update_val=0.000002
+Test Update: dw=0.004250, update_val=0.000004
+Test Update: dw=0.000229, update_val=0.000000
+cycles[e1 b150/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956873 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706639 bwd_wrapper=5871412
+epoch 1 step 150/313 loss: 3.324916
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1240  (over 43 classes)
+Test Update: dw=0.000011, update_val=0.000000
+Test Update: dw=0.000214, update_val=0.000000
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b151/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956774 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716715 bwd_wrapper=5881413
+epoch 1 step 151/313 loss: 4.270060
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1111  (over 42 classes)
+Test Update: dw=0.002769, update_val=0.000003
+Test Update: dw=-0.000710, update_val=-0.000001
+Test Update: dw=-0.000019, update_val=0.000000
+cycles[e1 b152/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957451 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721005 bwd_wrapper=5886405
+epoch 1 step 152/313 loss: 4.020557
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1938  (over 43 classes)
+Test Update: dw=-0.023834, update_val=-0.000024
+Test Update: dw=0.001187, update_val=0.000001
+Test Update: dw=0.000258, update_val=0.000000
+cycles[e1 b153/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956814 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716641 bwd_wrapper=5881401
+epoch 1 step 153/313 loss: 3.536625
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1150  (over 40 classes)
+Test Update: dw=0.000580, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000016, update_val=0.000000
+cycles[e1 b154/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956501 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711978 bwd_wrapper=5876404
+epoch 1 step 154/313 loss: 3.916723
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1970  (over 44 classes)
+Test Update: dw=0.000454, update_val=0.000000
+Test Update: dw=0.000594, update_val=0.000001
+Test Update: dw=0.000170, update_val=0.000000
+cycles[e1 b155/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956734 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=701811 bwd_wrapper=5866386
+epoch 1 step 155/313 loss: 4.266600
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1048  (over 42 classes)
+Test Update: dw=-0.054779, update_val=-0.000055
+Test Update: dw=0.000570, update_val=0.000001
+Test Update: dw=0.000080, update_val=0.000000
+cycles[e1 b156/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956664 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716793 bwd_wrapper=5881381
+epoch 1 step 156/313 loss: 4.898911
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0813  (over 41 classes)
+Test Update: dw=0.018204, update_val=0.000018
+Test Update: dw=-0.000055, update_val=-0.000000
+Test Update: dw=-0.000329, update_val=-0.000000
+cycles[e1 b157/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957009 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726461 bwd_wrapper=5891409
+epoch 1 step 157/313 loss: 4.526164
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1574  (over 36 classes)
+Test Update: dw=-0.002918, update_val=-0.000003
+Test Update: dw=-0.008995, update_val=-0.000009
+Test Update: dw=0.001692, update_val=0.000002
+cycles[e1 b158/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956684 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726814 bwd_wrapper=5891409
+epoch 1 step 158/313 loss: 3.108589
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1270  (over 42 classes)
+Test Update: dw=0.000284, update_val=0.000000
+Test Update: dw=0.000078, update_val=0.000000
+Test Update: dw=0.000005, update_val=0.000000
+cycles[e1 b159/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956554 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706944 bwd_wrapper=5871433
+epoch 1 step 159/313 loss: 4.052151
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1163  (over 43 classes)
+Test Update: dw=0.022598, update_val=0.000023
+Test Update: dw=0.004135, update_val=0.000004
+Test Update: dw=0.005398, update_val=0.000005
+cycles[e1 b160/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957002 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706470 bwd_wrapper=5871424
+epoch 1 step 160/313 loss: 3.722859
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1744  (over 39 classes)
+Test Update: dw=-0.000042, update_val=-0.000000
+Test Update: dw=0.000104, update_val=0.000000
+Test Update: dw=0.000022, update_val=0.000000
+cycles[e1 b161/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956693 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716811 bwd_wrapper=5881385
+epoch 1 step 161/313 loss: 3.621087
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0814  (over 43 classes)
+Test Update: dw=0.010475, update_val=0.000010
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000028, update_val=0.000000
+cycles[e1 b162/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956594 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706885 bwd_wrapper=5871413
+epoch 1 step 162/313 loss: 5.000610
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1508  (over 42 classes)
+Test Update: dw=0.000241, update_val=0.000000
+Test Update: dw=-0.016556, update_val=-0.000017
+Test Update: dw=-0.000429, update_val=-0.000000
+cycles[e1 b163/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956486 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726994 bwd_wrapper=5891385
+epoch 1 step 163/313 loss: 3.794337
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0641  (over 39 classes)
+Test Update: dw=0.002893, update_val=0.000003
+Test Update: dw=-0.005287, update_val=-0.000005
+Test Update: dw=-0.000213, update_val=-0.000000
+cycles[e1 b164/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956929 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726565 bwd_wrapper=5891420
+epoch 1 step 164/313 loss: 4.075630
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2172  (over 41 classes)
+Test Update: dw=-0.003456, update_val=-0.000003
+Test Update: dw=0.000040, update_val=0.000000
+Test Update: dw=-0.000011, update_val=0.000000
+cycles[e1 b165/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956589 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721910 bwd_wrapper=5886394
+epoch 1 step 165/313 loss: 3.232706
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1037  (over 45 classes)
+Test Update: dw=0.000568, update_val=0.000001
+Test Update: dw=-0.001163, update_val=-0.000001
+Test Update: dw=0.000049, update_val=0.000000
+cycles[e1 b166/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956763 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716727 bwd_wrapper=5881382
+epoch 1 step 166/313 loss: 3.225038
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1125  (over 40 classes)
+Test Update: dw=0.002155, update_val=0.000002
+Test Update: dw=-0.000314, update_val=-0.000000
+Test Update: dw=-0.000078, update_val=-0.000000
+cycles[e1 b167/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956806 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726693 bwd_wrapper=5891396
+epoch 1 step 167/313 loss: 3.660358
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0891  (over 43 classes)
+Test Update: dw=0.001968, update_val=0.000002
+Test Update: dw=-0.004520, update_val=-0.000005
+Test Update: dw=-0.000667, update_val=-0.000001
+cycles[e1 b168/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956916 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726557 bwd_wrapper=5891381
+epoch 1 step 168/313 loss: 4.021029
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2281  (over 38 classes)
+Test Update: dw=0.000042, update_val=0.000000
+Test Update: dw=-0.000061, update_val=-0.000000
+Test Update: dw=-0.000001, update_val=0.000000
+cycles[e1 b169/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=957178 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721341 bwd_wrapper=5886385
+epoch 1 step 169/313 loss: 3.759865
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1759  (over 36 classes)
+Test Update: dw=0.000877, update_val=0.000001
+Test Update: dw=-0.000005, update_val=0.000000
+Test Update: dw=-0.000051, update_val=-0.000000
+cycles[e1 b170/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957249 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721190 bwd_wrapper=5886382
+epoch 1 step 170/313 loss: 4.539125
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1370  (over 45 classes)
+Test Update: dw=0.007271, update_val=0.000007
+Test Update: dw=0.004719, update_val=0.000005
+Test Update: dw=0.001266, update_val=0.000001
+cycles[e1 b171/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957421 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706014 bwd_wrapper=5871384
+epoch 1 step 171/313 loss: 5.152035
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0682  (over 44 classes)
+Test Update: dw=0.000184, update_val=0.000000
+Test Update: dw=-0.000249, update_val=-0.000000
+Test Update: dw=-0.000451, update_val=-0.000000
+cycles[e1 b172/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957576 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=725891 bwd_wrapper=5891428
+epoch 1 step 172/313 loss: 5.056354
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1136  (over 44 classes)
+Test Update: dw=0.000005, update_val=0.000000
+Test Update: dw=-0.001056, update_val=-0.000001
+Test Update: dw=-0.000071, update_val=-0.000000
+cycles[e1 b173/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957017 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726479 bwd_wrapper=5891420
+epoch 1 step 173/313 loss: 4.209462
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0527  (over 43 classes)
+Test Update: dw=0.000024, update_val=0.000000
+Test Update: dw=-0.000141, update_val=-0.000000
+Test Update: dw=-0.000228, update_val=-0.000000
+cycles[e1 b174/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956908 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726632 bwd_wrapper=5891397
+epoch 1 step 174/313 loss: 3.996875
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1085  (over 43 classes)
+Test Update: dw=0.000147, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000006, update_val=0.000000
+cycles[e1 b175/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957234 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711269 bwd_wrapper=5876397
+epoch 1 step 175/313 loss: 4.832607
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 46 classes)
+Test Update: dw=0.000008, update_val=0.000000
+Test Update: dw=0.000197, update_val=0.000000
+Test Update: dw=-0.000126, update_val=-0.000000
+cycles[e1 b176/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957160 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716347 bwd_wrapper=5881414
+epoch 1 step 176/313 loss: 3.953651
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0935  (over 41 classes)
+Test Update: dw=0.032593, update_val=0.000033
+Test Update: dw=0.003794, update_val=0.000004
+Test Update: dw=0.000279, update_val=0.000000
+cycles[e1 b177/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956838 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706597 bwd_wrapper=5871409
+epoch 1 step 177/313 loss: 4.636399
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1468  (over 42 classes)
+Test Update: dw=0.002895, update_val=0.000003
+Test Update: dw=-0.000490, update_val=-0.000000
+Test Update: dw=-0.000106, update_val=-0.000000
+cycles[e1 b178/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956959 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726546 bwd_wrapper=5891392
+epoch 1 step 178/313 loss: 3.892172
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0942  (over 46 classes)
+Test Update: dw=0.000682, update_val=0.000001
+Test Update: dw=0.000012, update_val=0.000000
+Test Update: dw=0.000027, update_val=0.000000
+cycles[e1 b179/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957001 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706545 bwd_wrapper=5871426
+epoch 1 step 179/313 loss: 4.684611
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0775  (over 43 classes)
+Test Update: dw=0.000165, update_val=0.000000
+Test Update: dw=-0.005978, update_val=-0.000006
+Test Update: dw=-0.000317, update_val=-0.000000
+cycles[e1 b180/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956617 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726834 bwd_wrapper=5891442
+epoch 1 step 180/313 loss: 4.198140
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2083  (over 44 classes)
+Test Update: dw=0.009354, update_val=0.000009
+Test Update: dw=-0.000083, update_val=-0.000000
+Test Update: dw=0.000003, update_val=0.000000
+cycles[e1 b181/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956702 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716783 bwd_wrapper=5881422
+epoch 1 step 181/313 loss: 3.773960
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1174  (over 44 classes)
+Test Update: dw=0.017776, update_val=0.000018
+Test Update: dw=0.005928, update_val=0.000006
+Test Update: dw=0.000776, update_val=0.000001
+cycles[e1 b182/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956751 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706729 bwd_wrapper=5871413
+epoch 1 step 182/313 loss: 4.495962
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2051  (over 39 classes)
+Test Update: dw=0.000229, update_val=0.000000
+Test Update: dw=-0.003132, update_val=-0.000003
+Test Update: dw=0.000175, update_val=0.000000
+cycles[e1 b183/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957157 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716338 bwd_wrapper=5881410
+epoch 1 step 183/313 loss: 3.757175
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1594  (over 46 classes)
+Test Update: dw=0.000006, update_val=0.000000
+Test Update: dw=-0.000048, update_val=-0.000000
+Test Update: dw=0.000029, update_val=0.000000
+cycles[e1 b184/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956947 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716551 bwd_wrapper=5881397
+epoch 1 step 184/313 loss: 3.960875
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2121  (over 33 classes)
+Test Update: dw=0.000252, update_val=0.000000
+Test Update: dw=0.003674, update_val=0.000004
+Test Update: dw=0.000050, update_val=0.000000
+cycles[e1 b185/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957190 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706311 bwd_wrapper=5871377
+epoch 1 step 185/313 loss: 3.028160
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2342  (over 37 classes)
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b186/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=957265 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706197 bwd_wrapper=5871368
+epoch 1 step 186/313 loss: 4.795208
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1159  (over 46 classes)
+Test Update: dw=-0.007214, update_val=-0.000007
+Test Update: dw=-0.000984, update_val=-0.000001
+Test Update: dw=-0.000403, update_val=-0.000000
+cycles[e1 b187/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957357 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736126 bwd_wrapper=5901408
+epoch 1 step 187/313 loss: 4.481522
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1064  (over 47 classes)
+Test Update: dw=0.002348, update_val=0.000002
+Test Update: dw=-0.000229, update_val=-0.000000
+Test Update: dw=-0.000037, update_val=-0.000000
+cycles[e1 b188/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957124 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726367 bwd_wrapper=5891389
+epoch 1 step 188/313 loss: 4.433906
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1822  (over 43 classes)
+Test Update: dw=0.012413, update_val=0.000012
+Test Update: dw=-0.000001, update_val=0.000000
+Test Update: dw=-0.000118, update_val=-0.000000
+cycles[e1 b189/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956869 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721576 bwd_wrapper=5886404
+epoch 1 step 189/313 loss: 3.264122
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1937  (over 42 classes)
+Test Update: dw=-0.084656, update_val=-0.000085
+Test Update: dw=-0.000414, update_val=-0.000000
+Test Update: dw=-0.000011, update_val=0.000000
+cycles[e1 b190/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=957073 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=731419 bwd_wrapper=5896384
+epoch 1 step 190/313 loss: 3.028809
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1711  (over 38 classes)
+Test Update: dw=0.000867, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000004, update_val=0.000000
+cycles[e1 b191/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956969 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711553 bwd_wrapper=5876388
+epoch 1 step 191/313 loss: 3.143746
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1439  (over 44 classes)
+Test Update: dw=0.000318, update_val=0.000000
+Test Update: dw=0.000206, update_val=0.000000
+Test Update: dw=-0.000025, update_val=0.000000
+cycles[e1 b192/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956722 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711780 bwd_wrapper=5876386
+epoch 1 step 192/313 loss: 3.835494
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1886  (over 38 classes)
+Test Update: dw=0.000578, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000037, update_val=-0.000000
+cycles[e1 b193/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956531 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712028 bwd_wrapper=5876385
+epoch 1 step 193/313 loss: 4.432868
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1279  (over 43 classes)
+Test Update: dw=0.000780, update_val=0.000001
+Test Update: dw=0.020676, update_val=0.000021
+Test Update: dw=0.003225, update_val=0.000003
+cycles[e1 b194/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956633 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706861 bwd_wrapper=5871393
+epoch 1 step 194/313 loss: 3.941765
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1905  (over 42 classes)
+Test Update: dw=0.000013, update_val=0.000000
+Test Update: dw=-0.001890, update_val=-0.000002
+Test Update: dw=-0.000691, update_val=-0.000001
+cycles[e1 b195/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956618 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726861 bwd_wrapper=5891406
+epoch 1 step 195/313 loss: 3.364774
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1220  (over 41 classes)
+Test Update: dw=0.012589, update_val=0.000013
+Test Update: dw=0.001426, update_val=0.000001
+Test Update: dw=0.000286, update_val=0.000000
+cycles[e1 b196/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956579 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706927 bwd_wrapper=5871394
+epoch 1 step 196/313 loss: 5.254596
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2024  (over 42 classes)
+Test Update: dw=0.000011, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000024, update_val=0.000000
+cycles[e1 b197/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956614 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706867 bwd_wrapper=5871386
+epoch 1 step 197/313 loss: 3.218386
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 40 classes)
+Test Update: dw=0.000557, update_val=0.000001
+Test Update: dw=0.001456, update_val=0.000001
+Test Update: dw=0.000351, update_val=0.000000
+cycles[e1 b198/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956706 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=701826 bwd_wrapper=5866402
+epoch 1 step 198/313 loss: 4.177667
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1598  (over 39 classes)
+Test Update: dw=0.000905, update_val=0.000001
+Test Update: dw=-0.000368, update_val=-0.000000
+Test Update: dw=-0.000075, update_val=-0.000000
+cycles[e1 b199/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956710 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726784 bwd_wrapper=5891398
+epoch 1 step 199/313 loss: 4.136697
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1047  (over 43 classes)
+Test Update: dw=0.000428, update_val=0.000000
+Test Update: dw=0.000654, update_val=0.000001
+Test Update: dw=0.000015, update_val=0.000000
+cycles[e1 b200/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956807 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706666 bwd_wrapper=5871385
+epoch 1 step 200/313 loss: 4.331913
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1232  (over 46 classes)
+Test Update: dw=0.001252, update_val=0.000001
+Test Update: dw=-0.000095, update_val=-0.000000
+Test Update: dw=-0.000042, update_val=-0.000000
+cycles[e1 b201/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957374 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726109 bwd_wrapper=5891407
+epoch 1 step 201/313 loss: 4.070008
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0833  (over 46 classes)
+Test Update: dw=0.002621, update_val=0.000003
+Test Update: dw=-0.000579, update_val=-0.000001
+Test Update: dw=-0.001406, update_val=-0.000001
+cycles[e1 b202/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957096 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726363 bwd_wrapper=5891485
+epoch 1 step 202/313 loss: 4.044094
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0709  (over 47 classes)
+Test Update: dw=0.001374, update_val=0.000001
+Test Update: dw=0.000545, update_val=0.000001
+Test Update: dw=-0.000110, update_val=-0.000000
+cycles[e1 b203/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956487 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716960 bwd_wrapper=5881525
+epoch 1 step 203/313 loss: 5.245306
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1220  (over 41 classes)
+Test Update: dw=0.000245, update_val=0.000000
+Test Update: dw=0.002802, update_val=0.000003
+Test Update: dw=0.000194, update_val=0.000000
+cycles[e1 b204/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957280 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706212 bwd_wrapper=5871514
+epoch 1 step 204/313 loss: 3.501044
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2315  (over 36 classes)
+Test Update: dw=0.000433, update_val=0.000000
+Test Update: dw=-0.001364, update_val=-0.000001
+Test Update: dw=-0.000054, update_val=-0.000000
+cycles[e1 b205/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=957014 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726509 bwd_wrapper=5891477
+epoch 1 step 205/313 loss: 2.997863
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2387  (over 37 classes)
+Test Update: dw=0.000321, update_val=0.000000
+Test Update: dw=-0.000962, update_val=-0.000001
+Test Update: dw=-0.000008, update_val=0.000000
+cycles[e1 b206/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=957006 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721531 bwd_wrapper=5886481
+epoch 1 step 206/313 loss: 3.895788
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2065  (over 41 classes)
+Test Update: dw=0.026398, update_val=0.000026
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000106, update_val=-0.000000
+cycles[e1 b207/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=957518 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=715976 bwd_wrapper=5881504
+epoch 1 step 207/313 loss: 3.592385
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1686  (over 35 classes)
+Test Update: dw=0.000151, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000027, update_val=0.000000
+cycles[e1 b208/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957310 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711186 bwd_wrapper=5876505
+epoch 1 step 208/313 loss: 3.854089
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0930  (over 43 classes)
+Test Update: dw=0.000734, update_val=0.000001
+Test Update: dw=0.000033, update_val=0.000000
+Test Update: dw=-0.000015, update_val=0.000000
+cycles[e1 b209/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957782 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=710761 bwd_wrapper=5876502
+epoch 1 step 209/313 loss: 3.743823
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1148  (over 45 classes)
+Test Update: dw=0.008141, update_val=0.000008
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000072, update_val=-0.000000
+cycles[e1 b210/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957563 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=715933 bwd_wrapper=5881513
+epoch 1 step 210/313 loss: 4.577333
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2368  (over 38 classes)
+Test Update: dw=0.000034, update_val=0.000000
+Test Update: dw=0.000293, update_val=0.000000
+Test Update: dw=0.000025, update_val=0.000000
+cycles[e1 b211/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=957103 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706399 bwd_wrapper=5871474
+epoch 1 step 211/313 loss: 3.507524
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2093  (over 43 classes)
+Test Update: dw=0.002241, update_val=0.000002
+Test Update: dw=-0.000114, update_val=-0.000000
+Test Update: dw=-0.000091, update_val=-0.000000
+cycles[e1 b212/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956971 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726515 bwd_wrapper=5891512
+epoch 1 step 212/313 loss: 3.945294
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1786  (over 42 classes)
+Test Update: dw=0.002487, update_val=0.000003
+Test Update: dw=-0.003338, update_val=-0.000003
+Test Update: dw=-0.000094, update_val=-0.000000
+cycles[e1 b213/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956672 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726848 bwd_wrapper=5891505
+epoch 1 step 213/313 loss: 3.629479
+batch accuracy:  0.4062  (13 / 32 correct)
+batch macro F1:  0.2928  (over 37 classes)
+Test Update: dw=0.000543, update_val=0.000001
+Test Update: dw=0.000845, update_val=0.000001
+Test Update: dw=0.000101, update_val=0.000000
+cycles[e1 b214/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=957207 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706297 bwd_wrapper=5871485
+epoch 1 step 214/313 loss: 3.261876
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1583  (over 40 classes)
+Test Update: dw=0.000136, update_val=0.000000
+Test Update: dw=0.000112, update_val=0.000000
+Test Update: dw=0.000080, update_val=0.000000
+cycles[e1 b215/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957132 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706378 bwd_wrapper=5871473
+epoch 1 step 215/313 loss: 2.685455
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1708  (over 40 classes)
+Test Update: dw=0.000004, update_val=0.000000
+Test Update: dw=-0.001123, update_val=-0.000001
+Test Update: dw=-0.000050, update_val=-0.000000
+cycles[e1 b216/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957439 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726077 bwd_wrapper=5891473
+epoch 1 step 216/313 loss: 4.149863
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1770  (over 39 classes)
+Test Update: dw=0.000077, update_val=0.000000
+Test Update: dw=-0.000622, update_val=-0.000001
+Test Update: dw=-0.000773, update_val=-0.000001
+cycles[e1 b217/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956863 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726662 bwd_wrapper=5891494
+epoch 1 step 217/313 loss: 4.595345
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1542  (over 40 classes)
+Test Update: dw=0.000037, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000020, update_val=0.000000
+cycles[e1 b218/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957221 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711281 bwd_wrapper=5876512
+epoch 1 step 218/313 loss: 3.658614
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1100  (over 42 classes)
+Test Update: dw=0.006760, update_val=0.000007
+Test Update: dw=0.000339, update_val=0.000000
+Test Update: dw=0.000252, update_val=0.000000
+cycles[e1 b219/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957117 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706366 bwd_wrapper=5871485
+epoch 1 step 219/313 loss: 4.861929
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1259  (over 45 classes)
+Test Update: dw=0.016403, update_val=0.000016
+Test Update: dw=0.004410, update_val=0.000004
+Test Update: dw=0.001715, update_val=0.000002
+cycles[e1 b220/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957286 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706192 bwd_wrapper=5871524
+epoch 1 step 220/313 loss: 4.908572
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1968  (over 36 classes)
+Test Update: dw=0.001202, update_val=0.000001
+Test Update: dw=-0.000144, update_val=-0.000000
+Test Update: dw=-0.000031, update_val=-0.000000
+cycles[e1 b221/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956806 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726707 bwd_wrapper=5891468
+epoch 1 step 221/313 loss: 3.373919
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1308  (over 40 classes)
+Test Update: dw=0.000457, update_val=0.000000
+Test Update: dw=-0.000358, update_val=-0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b222/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956766 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716687 bwd_wrapper=5881485
+epoch 1 step 222/313 loss: 3.903177
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1148  (over 45 classes)
+Test Update: dw=0.000467, update_val=0.000000
+Test Update: dw=-0.001141, update_val=-0.000001
+Test Update: dw=-0.000029, update_val=0.000000
+cycles[e1 b223/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956807 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721661 bwd_wrapper=5886517
+epoch 1 step 223/313 loss: 4.500761
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.0939  (over 44 classes)
+Test Update: dw=0.000675, update_val=0.000001
+Test Update: dw=0.000466, update_val=0.000000
+Test Update: dw=0.000163, update_val=0.000000
+cycles[e1 b224/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957049 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706453 bwd_wrapper=5871501
+epoch 1 step 224/313 loss: 3.824733
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1705  (over 43 classes)
+Test Update: dw=0.000231, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000049, update_val=0.000000
+cycles[e1 b225/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956623 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706898 bwd_wrapper=5871485
+epoch 1 step 225/313 loss: 3.260184
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1423  (over 41 classes)
+Test Update: dw=-0.002647, update_val=-0.000003
+Test Update: dw=0.001019, update_val=0.000001
+Test Update: dw=0.000003, update_val=0.000000
+cycles[e1 b226/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956577 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716939 bwd_wrapper=5881513
+epoch 1 step 226/313 loss: 3.810650
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1706  (over 42 classes)
+Test Update: dw=0.000364, update_val=0.000000
+Test Update: dw=0.003284, update_val=0.000003
+Test Update: dw=0.001378, update_val=0.000001
+cycles[e1 b227/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957180 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706315 bwd_wrapper=5871501
+epoch 1 step 227/313 loss: 3.720331
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1138  (over 41 classes)
+Test Update: dw=0.002789, update_val=0.000003
+Test Update: dw=-0.002901, update_val=-0.000003
+Test Update: dw=-0.000928, update_val=-0.000001
+cycles[e1 b228/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956743 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726749 bwd_wrapper=5891510
+epoch 1 step 228/313 loss: 4.606748
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1667  (over 41 classes)
+Test Update: dw=0.001233, update_val=0.000001
+Test Update: dw=0.000012, update_val=0.000000
+Test Update: dw=0.000001, update_val=0.000000
+cycles[e1 b229/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956884 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706623 bwd_wrapper=5871514
+epoch 1 step 229/313 loss: 3.850371
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1708  (over 40 classes)
+Test Update: dw=0.016006, update_val=0.000016
+Test Update: dw=-0.003542, update_val=-0.000004
+Test Update: dw=-0.002926, update_val=-0.000003
+cycles[e1 b230/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956798 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726712 bwd_wrapper=5891500
+epoch 1 step 230/313 loss: 2.959365
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1032  (over 42 classes)
+Test Update: dw=0.000343, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000004, update_val=0.000000
+cycles[e1 b231/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956897 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711589 bwd_wrapper=5876489
+epoch 1 step 231/313 loss: 4.660985
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1627  (over 42 classes)
+Test Update: dw=0.000170, update_val=0.000000
+Test Update: dw=-0.001554, update_val=-0.000002
+Test Update: dw=-0.000021, update_val=0.000000
+cycles[e1 b232/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956315 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=722161 bwd_wrapper=5886477
+epoch 1 step 232/313 loss: 4.638601
+batch accuracy:  0.3438  (11 / 32 correct)
+batch macro F1:  0.2198  (over 37 classes)
+Test Update: dw=0.000001, update_val=0.000000
+Test Update: dw=-0.006165, update_val=-0.000006
+Test Update: dw=-0.000487, update_val=-0.000000
+cycles[e1 b233/313]: prep=5432387 fwd=281859694 pred+metric=502867 loss=956467 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726992 bwd_wrapper=5891457
+epoch 1 step 233/313 loss: 3.541749
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1746  (over 42 classes)
+Test Update: dw=-0.009880, update_val=-0.000010
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000142, update_val=0.000000
+cycles[e1 b234/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956559 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716909 bwd_wrapper=5881477
+epoch 1 step 234/313 loss: 5.390476
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1207  (over 37 classes)
+Test Update: dw=0.000155, update_val=0.000000
+Test Update: dw=-0.000006, update_val=0.000000
+Test Update: dw=-0.000050, update_val=-0.000000
+cycles[e1 b235/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956513 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721978 bwd_wrapper=5886498
+epoch 1 step 235/313 loss: 4.564387
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0875  (over 40 classes)
+Test Update: dw=0.001324, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000003, update_val=0.000000
+cycles[e1 b236/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956614 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711890 bwd_wrapper=5876490
+epoch 1 step 236/313 loss: 4.328013
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2149  (over 38 classes)
+Test Update: dw=0.009529, update_val=0.000010
+Test Update: dw=0.000206, update_val=0.000000
+Test Update: dw=-0.000001, update_val=0.000000
+cycles[e1 b237/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956376 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=712089 bwd_wrapper=5876486
+epoch 1 step 237/313 loss: 4.237309
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1272  (over 38 classes)
+Test Update: dw=-0.050385, update_val=-0.000050
+Test Update: dw=0.003315, update_val=0.000003
+Test Update: dw=0.000119, update_val=0.000000
+cycles[e1 b238/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956632 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716893 bwd_wrapper=5881481
+epoch 1 step 238/313 loss: 4.727593
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0652  (over 46 classes)
+Test Update: dw=0.000566, update_val=0.000001
+Test Update: dw=-0.000877, update_val=-0.000001
+Test Update: dw=-0.000495, update_val=-0.000000
+cycles[e1 b239/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956813 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726619 bwd_wrapper=5891506
+epoch 1 step 239/313 loss: 4.594003
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1138  (over 41 classes)
+Test Update: dw=0.004581, update_val=0.000005
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000471, update_val=0.000000
+cycles[e1 b240/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957002 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706502 bwd_wrapper=5871506
+epoch 1 step 240/313 loss: 3.767341
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0593  (over 45 classes)
+Test Update: dw=0.001430, update_val=0.000001
+Test Update: dw=0.014381, update_val=0.000014
+Test Update: dw=0.000029, update_val=0.000000
+cycles[e1 b241/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956945 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706510 bwd_wrapper=5871509
+epoch 1 step 241/313 loss: 4.902898
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1825  (over 42 classes)
+Test Update: dw=0.000029, update_val=0.000000
+Test Update: dw=-0.003910, update_val=-0.000004
+Test Update: dw=0.000165, update_val=0.000000
+cycles[e1 b242/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=957061 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711463 bwd_wrapper=5876505
+epoch 1 step 242/313 loss: 3.602789
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1389  (over 48 classes)
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000018, update_val=0.000000
+cycles[e1 b243/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956724 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711788 bwd_wrapper=5876522
+epoch 1 step 243/313 loss: 4.049658
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1455  (over 41 classes)
+Test Update: dw=0.000435, update_val=0.000000
+Test Update: dw=0.001308, update_val=0.000001
+Test Update: dw=-0.000106, update_val=-0.000000
+cycles[e1 b244/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956728 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716740 bwd_wrapper=5881494
+epoch 1 step 244/313 loss: 3.382444
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1136  (over 44 classes)
+Test Update: dw=0.000106, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000186, update_val=-0.000000
+cycles[e1 b245/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957288 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716223 bwd_wrapper=5881506
+epoch 1 step 245/313 loss: 4.450044
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1167  (over 44 classes)
+Test Update: dw=0.000034, update_val=0.000000
+Test Update: dw=0.000764, update_val=0.000001
+Test Update: dw=-0.000034, update_val=-0.000000
+cycles[e1 b246/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956536 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716951 bwd_wrapper=5881508
+epoch 1 step 246/313 loss: 3.991886
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1512  (over 43 classes)
+Test Update: dw=0.002333, update_val=0.000002
+Test Update: dw=-0.002455, update_val=-0.000002
+Test Update: dw=-0.000312, update_val=-0.000000
+cycles[e1 b247/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956606 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726885 bwd_wrapper=5891505
+epoch 1 step 247/313 loss: 3.270176
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0842  (over 43 classes)
+Test Update: dw=0.000696, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000057, update_val=0.000000
+cycles[e1 b248/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956698 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=701808 bwd_wrapper=5866504
+epoch 1 step 248/313 loss: 3.570911
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0833  (over 44 classes)
+Test Update: dw=0.000053, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000043, update_val=-0.000000
+cycles[e1 b249/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956885 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716633 bwd_wrapper=5881496
+epoch 1 step 249/313 loss: 5.527849
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1892  (over 37 classes)
+Test Update: dw=0.000013, update_val=0.000000
+Test Update: dw=-0.000285, update_val=-0.000000
+Test Update: dw=-0.000063, update_val=-0.000000
+cycles[e1 b250/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956752 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726767 bwd_wrapper=5891481
+epoch 1 step 250/313 loss: 4.231963
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1991  (over 38 classes)
+Test Update: dw=0.002430, update_val=0.000002
+Test Update: dw=0.000215, update_val=0.000000
+Test Update: dw=-0.000012, update_val=0.000000
+cycles[e1 b251/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956668 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711855 bwd_wrapper=5876468
+epoch 1 step 251/313 loss: 4.030931
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1583  (over 40 classes)
+Test Update: dw=0.001484, update_val=0.000001
+Test Update: dw=-0.000084, update_val=-0.000000
+Test Update: dw=-0.000018, update_val=0.000000
+cycles[e1 b252/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956584 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721884 bwd_wrapper=5886484
+epoch 1 step 252/313 loss: 3.411910
+batch accuracy:  0.0625  (2 / 32 correct)
+batch macro F1:  0.0370  (over 45 classes)
+Test Update: dw=0.000002, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+cycles[e1 b253/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957062 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706425 bwd_wrapper=5871544
+epoch 1 step 253/313 loss: 4.811946
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0778  (over 45 classes)
+Test Update: dw=0.000307, update_val=0.000000
+Test Update: dw=-0.001262, update_val=-0.000001
+Test Update: dw=-0.000637, update_val=-0.000001
+cycles[e1 b254/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956867 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726658 bwd_wrapper=5891521
+epoch 1 step 254/313 loss: 4.319476
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0452  (over 42 classes)
+Test Update: dw=0.002258, update_val=0.000002
+Test Update: dw=0.001987, update_val=0.000002
+Test Update: dw=0.000250, update_val=0.000000
+cycles[e1 b255/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957183 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706307 bwd_wrapper=5871504
+epoch 1 step 255/313 loss: 4.517961
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1286  (over 42 classes)
+Test Update: dw=0.007038, update_val=0.000007
+Test Update: dw=-0.000869, update_val=-0.000001
+Test Update: dw=0.000009, update_val=0.000000
+cycles[e1 b256/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956791 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716732 bwd_wrapper=5881504
+epoch 1 step 256/313 loss: 4.442908
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0479  (over 39 classes)
+Test Update: dw=0.000082, update_val=0.000000
+Test Update: dw=-0.000177, update_val=-0.000000
+Test Update: dw=-0.000051, update_val=-0.000000
+cycles[e1 b257/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957245 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726231 bwd_wrapper=5891502
+epoch 1 step 257/313 loss: 5.340315
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1111  (over 42 classes)
+Test Update: dw=0.000095, update_val=0.000000
+Test Update: dw=-0.000655, update_val=-0.000001
+Test Update: dw=0.000114, update_val=0.000000
+cycles[e1 b258/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956869 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716624 bwd_wrapper=5881465
+epoch 1 step 258/313 loss: 5.247704
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1196  (over 46 classes)
+Test Update: dw=0.000103, update_val=0.000000
+Test Update: dw=0.001664, update_val=0.000002
+Test Update: dw=-0.000084, update_val=-0.000000
+cycles[e1 b259/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957103 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711435 bwd_wrapper=5876505
+epoch 1 step 259/313 loss: 4.740967
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1364  (over 44 classes)
+Test Update: dw=0.003067, update_val=0.000003
+Test Update: dw=-0.000094, update_val=-0.000000
+Test Update: dw=-0.000023, update_val=0.000000
+cycles[e1 b260/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956859 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721652 bwd_wrapper=5886485
+epoch 1 step 260/313 loss: 3.716700
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.2033  (over 41 classes)
+Test Update: dw=0.005810, update_val=0.000006
+Test Update: dw=-0.002953, update_val=-0.000003
+Test Update: dw=-0.001643, update_val=-0.000002
+cycles[e1 b261/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956820 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721708 bwd_wrapper=5886493
+epoch 1 step 261/313 loss: 3.671609
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1163  (over 43 classes)
+Test Update: dw=0.000129, update_val=0.000000
+Test Update: dw=-0.004208, update_val=-0.000004
+Test Update: dw=-0.001723, update_val=-0.000002
+cycles[e1 b262/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956837 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726697 bwd_wrapper=5891526
+epoch 1 step 262/313 loss: 3.877461
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1151  (over 42 classes)
+Test Update: dw=-0.056458, update_val=-0.000057
+Test Update: dw=-0.002073, update_val=-0.000002
+Test Update: dw=-0.000212, update_val=-0.000000
+cycles[e1 b263/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956748 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736757 bwd_wrapper=5901510
+epoch 1 step 263/313 loss: 3.795231
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1111  (over 39 classes)
+Test Update: dw=-0.019958, update_val=-0.000020
+Test Update: dw=-0.000297, update_val=-0.000000
+Test Update: dw=-0.000035, update_val=-0.000000
+cycles[e1 b264/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957291 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736217 bwd_wrapper=5901501
+epoch 1 step 264/313 loss: 4.146181
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1917  (over 40 classes)
+Test Update: dw=0.000021, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000037, update_val=0.000000
+cycles[e1 b265/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956826 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706633 bwd_wrapper=5871496
+epoch 1 step 265/313 loss: 3.587098
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2342  (over 37 classes)
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.004856, update_val=0.000005
+Test Update: dw=0.001030, update_val=0.000001
+cycles[e1 b266/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956252 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707247 bwd_wrapper=5871469
+epoch 1 step 266/313 loss: 3.753059
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1197  (over 39 classes)
+Test Update: dw=0.000327, update_val=0.000000
+Test Update: dw=0.003159, update_val=0.000003
+Test Update: dw=0.000668, update_val=0.000001
+cycles[e1 b267/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957187 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706312 bwd_wrapper=5871494
+epoch 1 step 267/313 loss: 4.258376
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1087  (over 46 classes)
+Test Update: dw=0.000121, update_val=0.000000
+Test Update: dw=0.004536, update_val=0.000005
+Test Update: dw=-0.000035, update_val=-0.000000
+cycles[e1 b268/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956556 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716940 bwd_wrapper=5881507
+epoch 1 step 268/313 loss: 4.463516
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0795  (over 44 classes)
+Test Update: dw=-0.048920, update_val=-0.000049
+Test Update: dw=-0.000299, update_val=-0.000000
+Test Update: dw=-0.000046, update_val=-0.000000
+cycles[e1 b269/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957126 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=736389 bwd_wrapper=5901580
+epoch 1 step 269/313 loss: 4.783780
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1585  (over 41 classes)
+Test Update: dw=0.001572, update_val=0.000002
+Test Update: dw=-0.005360, update_val=-0.000005
+Test Update: dw=-0.000149, update_val=-0.000000
+cycles[e1 b270/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956842 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726633 bwd_wrapper=5891537
+epoch 1 step 270/313 loss: 3.462397
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.2045  (over 44 classes)
+Test Update: dw=0.001104, update_val=0.000001
+Test Update: dw=-0.000164, update_val=-0.000000
+Test Update: dw=-0.000895, update_val=-0.000001
+cycles[e1 b271/313]: prep=5432387 fwd=281859694 pred+metric=502868 loss=956798 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726716 bwd_wrapper=5891544
+epoch 1 step 271/313 loss: 3.134841
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1574  (over 36 classes)
+Test Update: dw=0.000013, update_val=0.000000
+Test Update: dw=0.000076, update_val=0.000000
+Test Update: dw=-0.000005, update_val=0.000000
+cycles[e1 b272/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956700 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711795 bwd_wrapper=5876546
+epoch 1 step 272/313 loss: 3.813036
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1061  (over 44 classes)
+Test Update: dw=-0.014954, update_val=-0.000015
+Test Update: dw=0.000087, update_val=0.000000
+Test Update: dw=0.000375, update_val=0.000000
+cycles[e1 b273/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956643 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716889 bwd_wrapper=5881552
+epoch 1 step 273/313 loss: 4.839362
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1930  (over 38 classes)
+Test Update: dw=0.000486, update_val=0.000000
+Test Update: dw=0.005081, update_val=0.000005
+Test Update: dw=0.000085, update_val=0.000000
+cycles[e1 b274/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957024 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706485 bwd_wrapper=5871520
+epoch 1 step 274/313 loss: 3.534546
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1333  (over 45 classes)
+Test Update: dw=0.000430, update_val=0.000000
+Test Update: dw=-0.000537, update_val=-0.000001
+Test Update: dw=-0.000105, update_val=-0.000000
+cycles[e1 b275/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956606 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726881 bwd_wrapper=5891558
+epoch 1 step 275/313 loss: 4.139731
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.1037  (over 45 classes)
+Test Update: dw=0.001791, update_val=0.000002
+Test Update: dw=-0.000121, update_val=-0.000000
+Test Update: dw=-0.000145, update_val=-0.000000
+cycles[e1 b276/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956807 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726702 bwd_wrapper=5891576
+epoch 1 step 276/313 loss: 4.792602
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1468  (over 42 classes)
+Test Update: dw=0.000361, update_val=0.000000
+Test Update: dw=-0.000932, update_val=-0.000001
+Test Update: dw=-0.000009, update_val=0.000000
+cycles[e1 b277/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956801 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=721707 bwd_wrapper=5886560
+epoch 1 step 277/313 loss: 3.834012
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1368  (over 39 classes)
+Test Update: dw=0.000179, update_val=0.000000
+Test Update: dw=0.000741, update_val=0.000001
+Test Update: dw=0.000356, update_val=0.000000
+cycles[e1 b278/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957336 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706159 bwd_wrapper=5871512
+epoch 1 step 278/313 loss: 4.141234
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0612  (over 49 classes)
+Test Update: dw=0.001534, update_val=0.000002
+Test Update: dw=0.001779, update_val=0.000002
+Test Update: dw=0.000095, update_val=0.000000
+cycles[e1 b279/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957021 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706436 bwd_wrapper=5871593
+epoch 1 step 279/313 loss: 4.959332
+batch accuracy:  0.1250  (4 / 32 correct)
+batch macro F1:  0.0750  (over 40 classes)
+Test Update: dw=0.000129, update_val=0.000000
+Test Update: dw=0.000288, update_val=0.000000
+Test Update: dw=-0.000204, update_val=-0.000000
+cycles[e1 b280/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956520 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716927 bwd_wrapper=5881553
+epoch 1 step 280/313 loss: 4.703229
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0635  (over 42 classes)
+Test Update: dw=0.005348, update_val=0.000005
+Test Update: dw=-0.020416, update_val=-0.000020
+Test Update: dw=-0.000700, update_val=-0.000001
+cycles[e1 b281/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957181 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726297 bwd_wrapper=5891560
+epoch 1 step 281/313 loss: 4.780949
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1151  (over 42 classes)
+Test Update: dw=0.002720, update_val=0.000003
+Test Update: dw=-0.003214, update_val=-0.000003
+Test Update: dw=-0.001551, update_val=-0.000002
+cycles[e1 b282/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=957135 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726322 bwd_wrapper=5891541
+epoch 1 step 282/313 loss: 3.850924
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0641  (over 39 classes)
+Test Update: dw=0.005211, update_val=0.000005
+Test Update: dw=0.001189, update_val=0.000001
+Test Update: dw=0.000488, update_val=0.000000
+cycles[e1 b283/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956908 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706559 bwd_wrapper=5871544
+epoch 1 step 283/313 loss: 4.831114
+batch accuracy:  0.2500  (8 / 32 correct)
+batch macro F1:  0.1833  (over 40 classes)
+Test Update: dw=0.002613, update_val=0.000003
+Test Update: dw=-0.001311, update_val=-0.000001
+Test Update: dw=-0.000194, update_val=-0.000000
+cycles[e1 b284/313]: prep=5432387 fwd=281859694 pred+metric=497868 loss=956636 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726835 bwd_wrapper=5891561
+epoch 1 step 284/313 loss: 4.338583
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1306  (over 37 classes)
+Test Update: dw=-0.034943, update_val=-0.000035
+Test Update: dw=0.000373, update_val=0.000000
+Test Update: dw=0.000135, update_val=0.000000
+cycles[e1 b285/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956719 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716738 bwd_wrapper=5881582
+epoch 1 step 285/313 loss: 4.474879
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1351  (over 38 classes)
+Test Update: dw=0.000902, update_val=0.000001
+Test Update: dw=-0.001252, update_val=-0.000001
+Test Update: dw=-0.000247, update_val=-0.000000
+cycles[e1 b286/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956715 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726780 bwd_wrapper=5891577
+epoch 1 step 286/313 loss: 4.484248
+batch accuracy:  0.1562  (5 / 32 correct)
+batch macro F1:  0.0935  (over 41 classes)
+Test Update: dw=0.005455, update_val=0.000005
+Test Update: dw=-0.006592, update_val=-0.000007
+Test Update: dw=-0.000766, update_val=-0.000001
+cycles[e1 b287/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957023 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=726469 bwd_wrapper=5891573
+epoch 1 step 287/313 loss: 3.716726
+batch accuracy:  0.3125  (10 / 32 correct)
+batch macro F1:  0.1825  (over 42 classes)
+Test Update: dw=0.000758, update_val=0.000001
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=-0.000002, update_val=0.000000
+cycles[e1 b288/313]: prep=5432387 fwd=281859694 pred+metric=502866 loss=956803 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=711695 bwd_wrapper=5876545
+epoch 1 step 288/313 loss: 3.817200
+batch accuracy:  0.2812  (9 / 32 correct)
+batch macro F1:  0.1573  (over 39 classes)
+Test Update: dw=0.000719, update_val=0.000001
+Test Update: dw=0.000034, update_val=0.000000
+Test Update: dw=0.000046, update_val=0.000000
+cycles[e1 b289/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956323 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=707145 bwd_wrapper=5871561
+epoch 1 step 289/313 loss: 3.364013
+batch accuracy:  0.2188  (7 / 32 correct)
+batch macro F1:  0.1515  (over 44 classes)
+Test Update: dw=0.026550, update_val=0.000027
+Test Update: dw=0.001380, update_val=0.000001
+Test Update: dw=-0.000845, update_val=-0.000001
+cycles[e1 b290/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=956800 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716629 bwd_wrapper=5881578
+epoch 1 step 290/313 loss: 3.884599
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0509  (over 36 classes)
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+cycles[e1 b291/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957162 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=481307 bwd_wrapper=5646709
+epoch 1 step 291/313 loss: 4.832471
+batch accuracy:  0.1875  (6 / 32 correct)
+batch macro F1:  0.1292  (over 40 classes)
+Test Update: dw=0.007107, update_val=0.000007
+Test Update: dw=0.000056, update_val=0.000000
+Test Update: dw=0.000061, update_val=0.000000
+cycles[e1 b292/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=956950 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=706528 bwd_wrapper=5871510
+epoch 1 step 292/313 loss: 4.579534
+batch accuracy:  0.0312  (1 / 32 correct)
+batch macro F1:  0.0196  (over 34 classes)
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+cycles[e1 b293/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957585 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=480925 bwd_wrapper=5646456
+epoch 1 step 293/313 loss: 10.030625
+batch accuracy:  0.0625  (2 / 32 correct)
+batch macro F1:  0.0505  (over 33 classes)
+Test Update: dw=0.000000, update_val=0.000000
+Test Update: dw=0.000000, update_val=0.000000
+cycles[e1 b294/313]: prep=5432387 fwd=281859694 pred+metric=497866 loss=957543 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=480953 bwd_wrapper=5646437
+epoch 1 step 294/313 loss: 10.450891
+batch accuracy:  0.0000  (0 / 32 correct)
+batch macro F1:  0.0000  (over 34 classes)
+Test Update: dw=0.000012, update_val=0.000000
+Test Update: dw=0.009590, update_val=0.000010
+Test Update: dw=-0.000350, update_val=-0.000000
+cycles[e1 b295/313]: prep=5432387 fwd=281859694 pred+metric=497867 loss=957425 zero_din=408 bwd_din=3222 bwd_db=568 bwd_dw=2782 bwd_total=716042 bwd_wrapper=5881345
+epoch 1 step 295/313 loss: 16.476067
+batch accuracy:  0.0938  (3 / 32 correct)
+batch macro F1:  0.0882  (over 34 classes)

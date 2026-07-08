@@ -27,10 +27,10 @@ include $(COMMON_DIR)/riscv_tests.mk
 include $(COMMON_DIR)/default_args.mk
 
 # Per-app source finder: skip app-local virtualenv and git metadata.
-find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
+find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" -o -path "*/sshfs_dir" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
 
-APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "main.c"))
-APPS += $(patsubst $(APPS_DIR)/%/main.cpp,%,$(shell find $(APPS_DIR) -name "main.cpp"))
+APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "sshfs_dir" -prune -o -name "main.c" -print))
+APPS += $(patsubst $(APPS_DIR)/%/main.cpp,%,$(shell find $(APPS_DIR) -name "sshfs_dir" -prune -o -name "main.cpp" -print))
 # Don't automatically compile the benchmark app, which is only a wrapper around the other apps
 BINARIES := $(filter-out bin/benchmarks bin/rivec-bmarks% bin/_%, $(addprefix bin/,$(APPS)))
 
@@ -98,16 +98,19 @@ FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
 
 # fc_layer needs: (1) compile-time train/loss knobs, (2) autovectorization off,
 # (3) assembler include root for data.S .incbin paths.
-bin/fc_layer:  $(APPS_DIR)/Makefile
-bin/fc_layer%: $(APPS_DIR)/Makefile
-bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
-bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
-bin/fc_layer:  AUTOVECTORIZE = 0
-bin/fc_layer%: AUTOVECTORIZE = 0
-bin/fc_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+# NOTE: use bin/fc_layer.% (dot separator) to avoid matching bin/fc_layer16only, bin/fc_layer32, etc.
+bin/fc_layer:   $(APPS_DIR)/Makefile
+bin/fc_layer.%: $(APPS_DIR)/Makefile
+bin/fc_layer:   ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer.%: ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer:   AUTOVECTORIZE = 0
+bin/fc_layer.%: AUTOVECTORIZE = 0
+bin/fc_layer:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer.%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer
 
 # Workaround: keep app-level autovectorization on, but compile training update
 # code without vectorization to avoid Spike runtime corruption in momentum_sgd.
@@ -152,6 +155,8 @@ bin/fc_layer32:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
 bin/fc_layer32%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer32
 bin/fc_layer32:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
 bin/fc_layer32%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32:  RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer32
+bin/fc_layer32%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer32
 
 fc_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
@@ -163,21 +168,109 @@ fc_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -ml
 # generated_data for data.S, and (2) build main.c (which carries the hand-copied
 # vector momentum_sgd asm) without autovectorization, mirroring the train.c rule.
 # ---------------------------------------------------------------------------
-bin/fc_layer_test:  $(APPS_DIR)/Makefile
-bin/fc_layer_test:  ENV_DEFINES += -DALEXNET_STATIC_MAX_BATCH=2 -DALEXNET_BATCHSIZE=2
-bin/fc_layer_test:  AUTOVECTORIZE = 0
-bin/fc_layer_test:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_test
-bin/fc_layer_test:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test:   $(APPS_DIR)/Makefile
+bin/fc_layer_test%: $(APPS_DIR)/Makefile
+bin/fc_layer_test:   ENV_DEFINES += -DALEXNET_STATIC_MAX_BATCH=2 -DALEXNET_BATCHSIZE=2
+bin/fc_layer_test%: ENV_DEFINES += -DALEXNET_STATIC_MAX_BATCH=2 -DALEXNET_BATCHSIZE=2
+bin/fc_layer_test:   AUTOVECTORIZE = 0
+bin/fc_layer_test%: AUTOVECTORIZE = 0
+bin/fc_layer_test:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer_test
+bin/fc_layer_test%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer_test
 
 fc_layer_test/main.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 fc_layer_test/main.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
+# ---------------------------------------------------------------------------
+# fc_layer16only: pure FP16 fully-connected layer
+# ---------------------------------------------------------------------------
+FC_LAYER16ONLY_MODE ?= train
+FC_LAYER16ONLY_LOSS ?= MSE
+FC_LAYER16ONLY_BATCHSIZE ?= 16
+FC_LAYER16ONLY_EPOCHS ?= 20
+FC_LAYER16ONLY_INFER_IDX ?= -1
+FC_LAYER16ONLY_STATIC_MAX_BATCH ?= $(FC_LAYER16ONLY_BATCHSIZE)
+FC_LAYER16ONLY_SAMPLES ?= $(FC_LAYER16ONLY_BATCHSIZE)
+
+ifeq ($(FC_LAYER16ONLY_MODE),train)
+FC_LAYER16ONLY_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER16ONLY_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER16ONLY_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER16ONLY_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER16ONLY_SAMPLES)
+else ifeq ($(FC_LAYER16ONLY_MODE),inference)
+FC_LAYER16ONLY_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER16ONLY_INFER_IDX)
+else
+$(error Unsupported FC_LAYER16ONLY_MODE='$(FC_LAYER16ONLY_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER16ONLY_LOSS),MSE)
+FC_LAYER16ONLY_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER16ONLY_LOSS),CEL)
+FC_LAYER16ONLY_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER16ONLY_LOSS='$(FC_LAYER16ONLY_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER16ONLY_DEFINES := $(FC_LAYER16ONLY_MODE_DEFINES) $(FC_LAYER16ONLY_LOSS_DEFINES)
+
+bin/fc_layer16only:  $(APPS_DIR)/Makefile
+bin/fc_layer16only%: $(APPS_DIR)/Makefile
+bin/fc_layer16only:  ENV_DEFINES += $(FC_LAYER16ONLY_DEFINES)
+bin/fc_layer16only%: ENV_DEFINES += $(FC_LAYER16ONLY_DEFINES)
+bin/fc_layer16only:  AUTOVECTORIZE = 0
+bin/fc_layer16only%: AUTOVECTORIZE = 0
+bin/fc_layer16only:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only:  RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16only
+
+fc_layer16only/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# ---------------------------------------------------------------------------
+# fc_layer16_batch12: assembler include root for data.S .incbin paths.
+# Had no dedicated rule at all, so .incbin "generated_data/..." couldn't
+# resolve for any build flavor (normal/spike/fpga).
+# ---------------------------------------------------------------------------
+bin/fc_layer16_batch12:  $(APPS_DIR)/Makefile
+bin/fc_layer16_batch12%: $(APPS_DIR)/Makefile
+bin/fc_layer16_batch12:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16_batch12
+bin/fc_layer16_batch12%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16_batch12
+bin/fc_layer16_batch12:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16_batch12
+bin/fc_layer16_batch12%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16_batch12
+bin/fc_layer16_batch12:  RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16_batch12
+bin/fc_layer16_batch12%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16_batch12
+
+# Compile data.S from within fc_layer16only/ so that .incbin resolves
+# "generated_data/..." relative to the app dir, not the apps/ CWD.
+# Without this, a stray apps/generated_data/ on the server confuses LLVM.
+fc_layer16only/data.S.o: fc_layer16only/data.S
+	cd $(APPS_DIR)/fc_layer16only && $(RISCV_CC) $(RISCV_CCFLAGS) -c data.S -o $(APPS_DIR)/fc_layer16only/data.S.o
+
+fc_layer16only/data.S.o.spike: fc_layer16only/data.S patch-spike-crt0
+	cd $(APPS_DIR)/fc_layer16only && $(RISCV_CC) $(RISCV_CCFLAGS_SPIKE) -c data.S -o $(APPS_DIR)/fc_layer16only/data.S.o.spike
+
 # conv_layer profile controls (mirrors fc_layer semantics)
 CONV_LAYER_MODE ?= train
-CONV_LAYER_BATCHSIZE ?= 2
+CONV_LAYER_BATCHSIZE ?= 1
 CONV_LAYER_EPOCHS ?= 1
 CONV_LAYER_INFER_IDX ?= -1
 CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
+
+# Spatial / channel dimensions — override to benchmark different configs.
+# Kernel stays 3x3; same-padding so OUT_H=IN_H, OUT_W=IN_W.
+# Remember to re-run the Python script with matching args before building:
+#   python3 conv_layer/scripts/generate_conv_test_vectors.py \
+#       --batch $(CONV_LAYER_BATCHSIZE) --c-in $(CONV_LAYER_C_IN) \
+#       --c-out $(CONV_LAYER_C_OUT) --h $(CONV_LAYER_H) --w $(CONV_LAYER_W)
+CONV_LAYER_C_IN  ?= 1
+CONV_LAYER_C_OUT ?= 1
+CONV_LAYER_H     ?= 1
+CONV_LAYER_W     ?= 16
+
+# im2col scratch for layer 1 (one image): C_IN * 9 * H * W
+CONV_LAYER_XCOL_ELEMS := $(shell expr $(CONV_LAYER_C_IN) \* 9 \* $(CONV_LAYER_H) \* $(CONV_LAYER_W))
 
 ifeq ($(CONV_LAYER_MODE),train)
 CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(CONV_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(CONV_LAYER_EPOCHS)
@@ -187,29 +280,138 @@ else
 $(error Unsupported CONV_LAYER_MODE='$(CONV_LAYER_MODE)'. Use train or inference)
 endif
 
-CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES)
+CONV_LAYER_DIM_DEFINES := \
+    -DCONV1_IN_CHANNELS=$(CONV_LAYER_C_IN)   \
+    -DCONV1_OUT_CHANNELS=$(CONV_LAYER_C_OUT)  \
+    -DCONV1_IN_H=$(CONV_LAYER_H) -DCONV1_IN_W=$(CONV_LAYER_W) \
+    -DCONV1_OUT_H=$(CONV_LAYER_H) -DCONV1_OUT_W=$(CONV_LAYER_W) \
+    -DCONV1_XCOL_ELEMS=$(CONV_LAYER_XCOL_ELEMS)
+
+CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES) $(CONV_LAYER_DIM_DEFINES)
 
 # conv_layer needs: (1) compile-time train knobs, (2) autovectorization off,
 # (3) assembler include root for data.S .incbin paths.
-bin/conv_layer:  $(APPS_DIR)/Makefile
-bin/conv_layer%: $(APPS_DIR)/Makefile
-bin/conv_layer:  ENV_DEFINES += $(CONV_LAYER_DEFINES)
-bin/conv_layer%: ENV_DEFINES += $(CONV_LAYER_DEFINES)
-bin/conv_layer:  AUTOVECTORIZE = 0
-bin/conv_layer%: AUTOVECTORIZE = 0
-bin/conv_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
-bin/conv_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
-bin/conv_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
-bin/conv_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+# NOTE: use bin/conv_layer.% (dot separator) to avoid matching bin/conv_layer32.
+bin/conv_layer:   $(APPS_DIR)/Makefile
+bin/conv_layer.%: $(APPS_DIR)/Makefile
+bin/conv_layer:   ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer.%: ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer:   AUTOVECTORIZE = 0
+bin/conv_layer.%: AUTOVECTORIZE = 0
+bin/conv_layer:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer.%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer
+bin/conv_layer.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer
 
 # Match fc_layer Spike compile flags for training update objects.
 conv_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# conv_layer32: same profile knobs as conv_layer, but must NOT reuse conv_layer's
+# -Wa,-I path. bin/conv_layer% used to match bin/conv_layer32 too, silently
+# pointing .incbin at conv_layer/generated_data/ instead of conv_layer32's own
+# (much larger) dataset, and never set RISCV_CCFLAGS_FPGA at all.
+bin/conv_layer32:   $(APPS_DIR)/Makefile
+bin/conv_layer32.%: $(APPS_DIR)/Makefile
+bin/conv_layer32:   ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer32.%: ENV_DEFINES += $(CONV_LAYER_DEFINES)
+bin/conv_layer32:   AUTOVECTORIZE = 0
+bin/conv_layer32.%: AUTOVECTORIZE = 0
+bin/conv_layer32:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer32
+bin/conv_layer32.%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer32
+bin/conv_layer32:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer32
+bin/conv_layer32.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer32
+bin/conv_layer32:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer32
+bin/conv_layer32.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer32
 
 # Ensure conv_layer objects rebuild when Makefile-defined knobs change.
 conv_layer/%.c.o: $(APPS_DIR)/Makefile
 conv_layer/%.S.o: $(APPS_DIR)/Makefile
 conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
 conv_layer/%.S.o.spike: $(APPS_DIR)/Makefile
+
+# ---------------------------------------------------------------------------
+# vggnet: VGGMini fp16 fine-tuning on CIFAR-100-C (gaussian_noise)
+#
+# Prerequisites (run once, from ~/vggnet):
+#   python3 scripts/prepare_cifar100c.py CIFAR-100-C/ gaussian_noise --severity 3
+#   python3 scripts/fp32_to_fp16_weights.py
+#
+# Usage:
+#   make spike-run-vggnet                                          # tiny, bs=16, ep=20
+#   make spike-run-vggnet VGGNET_VARIANT=small VGGNET_BATCHSIZE=8
+#   make spike-run-vggnet VGGNET_VARIANT=full  VGGNET_EPOCHS=5
+#
+# NOTE: vggnet uses a fully custom build rule (not the auto-template) because:
+#   - The auto-APPS find does not follow symlinks
+#   - scripts/im2col_test.c has its own main() that must be excluded
+#   - data_cifar100.S must be linked instead of data.S
+# ---------------------------------------------------------------------------
+VGGNET_BATCHSIZE        ?= 32
+VGGNET_EPOCHS           ?= 10
+VGGNET_STATIC_MAX_BATCH ?= $(VGGNET_BATCHSIZE)
+# tiny: C1=8 C2=16 C3=32 C4=64 C5=128 FC=128  (default for Spike)
+# small: C1=16 C2=32 C3=64 C4=128 C5=256 FC=256
+# full:  C1=32 C2=64 C3=128 C4=256 C5=512 FC=512
+VGGNET_VARIANT          ?= tiny
+
+ifeq ($(VGGNET_VARIANT),tiny)
+VGGNET_VARIANT_DEFINES := \
+    -DC1_CHANNELS=8   -DC2_CHANNELS=16  -DC3_CHANNELS=32 \
+    -DC4_CHANNELS=64  -DC5_CHANNELS=128 \
+    -DFC6_LAYER=128   -DFC7_LAYER=128
+else ifeq ($(VGGNET_VARIANT),small)
+VGGNET_VARIANT_DEFINES := \
+    -DC1_CHANNELS=16  -DC2_CHANNELS=32  -DC3_CHANNELS=64 \
+    -DC4_CHANNELS=128 -DC5_CHANNELS=256 \
+    -DFC6_LAYER=256   -DFC7_LAYER=256
+else
+VGGNET_VARIANT_DEFINES :=
+endif
+
+VGGNET_DEFINES := \
+    -DFINETUNE_16_MODE \
+    -DALEXNET_MODE_TRAIN \
+    -DALEXNET_BATCHSIZE=$(VGGNET_BATCHSIZE) \
+    -DALEXNET_STATIC_MAX_BATCH=$(VGGNET_STATIC_MAX_BATCH) \
+    -DALEXNET_EPOCHS=$(VGGNET_EPOCHS) \
+    -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) \
+    $(ALEXNET_TIMING_DEFINE) \
+    -DDATASET_CIFAR100 \
+    -DOUT_LAYER=100 \
+    -DSET_CEL \
+    $(VGGNET_VARIANT_DEFINES)
+
+# Explicit source list: main.c + kernel/*.c + data_cifar100.S
+# Excludes: scripts/ (has its own main), data.S (cifar10 — not needed here)
+VGGNET_KERNEL_SRCS := $(patsubst $(APPS_DIR)/%,%,\
+    $(shell find -L $(APPS_DIR)/vggnet/kernel -name "*.c" 2>/dev/null))
+VGGNET_SRCS_SPIKE  := vggnet/main.c $(VGGNET_KERNEL_SRCS) vggnet/data_cifar100.S
+VGGNET_OBJS_SPIKE  := $(addsuffix .o.spike,$(VGGNET_SRCS_SPIKE))
+
+# Per-object compile flags
+$(VGGNET_OBJS_SPIKE): ENV_DEFINES         += $(VGGNET_DEFINES)
+$(VGGNET_OBJS_SPIKE): RISCV_CCFLAGS_SPIKE += -Wa,-I$(APPS_DIR)/vggnet
+$(VGGNET_OBJS_SPIKE): $(APPS_DIR)/Makefile
+
+# train.c: disable auto-vectorizer (fp16 confuses Spike)
+vggnet/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += \
+    -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+bin/vggnet.spike: $(VGGNET_OBJS_SPIKE) $(RUNTIME_SPIKE) $(COMMON_SPIKE) patch-spike-crt0
+	mkdir -p bin/
+	$(RISCV_CC) -Iinclude $(RISCV_CCFLAGS_SPIKE) $(VGGNET_DEFINES) -o $@ \
+	    $(VGGNET_OBJS_SPIKE) $(RUNTIME_SPIKE) $(RISCV_LDFLAGS_SPIKE)
+	$(RISCV_OBJDUMP) $(RISCV_OBJDUMP_FLAGS) -D $@ > $@.dump
+
+.PHONY: spike-run-vggnet
+spike-run-vggnet: bin/vggnet.spike
+	mkdir -p spike_runs
+	@echo
+	@echo "Simulating vggnet with SPIKE:"
+	@echo
+	$(RISCV_SIM) $(RISCV_SIM_OPT) $< | tee spike_runs/spike-run-vggnet
 
 all: $(BINARIES)
 
@@ -219,6 +421,12 @@ linker_script: $(COMMON_DIR)/script/align_sections.sh $(ROOT_DIR)/../../config/$
 	chmod +x $(COMMON_DIR)/script/align_sections.sh
 	rm -f $(COMMON_DIR)/link.ld && cp $(COMMON_DIR)/arch.link.ld $(COMMON_DIR)/link.ld
 	$(COMMON_DIR)/script/align_sections.sh $(nr_lanes) $(COMMON_DIR)/link.ld
+
+.PHONY: linker_script_fpga
+linker_script_fpga: $(COMMON_DIR)/script/align_sections.sh $(ROOT_DIR)/../../config/$(config).mk
+	chmod +x $(COMMON_DIR)/script/align_sections.sh
+	rm -f $(COMMON_DIR)/link.fpga.ld && cp $(COMMON_DIR)/arch.link.fpga.ld $(COMMON_DIR)/link.fpga.ld
+	$(COMMON_DIR)/script/align_sections.sh $(nr_lanes) $(COMMON_DIR)/link.fpga.ld
 
 # Make all applications
 $(APPS): % : bin/% $(APPS_DIR)/Makefile $(shell find common -type f)
@@ -264,6 +472,16 @@ bin/$1.spike: $1/data.S.o.spike $(addsuffix .o.spike, $(call find_app_sources,$1
 	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
 endef
 $(foreach app,$(APPS),$(eval $(call app_compile_template_spike,$(app))))
+
+define app_compile_template_fpga
+bin/$1.fpga: $1/data.S.o.fpga $(addsuffix .o.fpga, $(call find_app_sources,$1)) $(RUNTIME_FPGA) linker_script_fpga
+	mkdir -p bin/
+	$$(RISCV_CC) -Iinclude $$(RISCV_CCFLAGS_FPGA) -o $$@ $$(addsuffix .o.fpga, $$(call find_app_sources,$1)) $(RUNTIME_FPGA) $$(RISCV_LDFLAGS_FPGA)
+	$$(RISCV_OBJDUMP) $$(RISCV_OBJDUMP_FLAGS) -D $$@ > $$@.dump
+	$$(RISCV_STRIP) $$@ -S --strip-unneeded
+	$$(RISCV_OBJCOPY) -O binary $$@ $$@.bin
+endef
+$(foreach app,$(APPS),$(eval $(call app_compile_template_fpga,$(app))))
 
 define app_compile_template
 bin/$1$(BIN_SUFFIX): $1/data.S.o $(addsuffix .o, $(call find_app_sources,$1)) $(RUNTIME_LLVM) linker_script
@@ -339,7 +557,7 @@ benchmarks_clean:
 	rm -vf kernel/*.c.*
 
 .PHONY: clean
-clean: riscv_tests_spike_clean benchmarks_clean
+clean: benchmarks_clean
 	rm -vf $(BINARIES)
 	rm -vf $(CVA6_BINARIES)
 	rm -vf $(ARA_BINARIES)

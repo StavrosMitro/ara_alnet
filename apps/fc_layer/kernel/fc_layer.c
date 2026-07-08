@@ -79,8 +79,27 @@ void fc_op_forward(fc_op *op)
     {
         printf_("[SCALAR] fc_op_forward: batchsize=%d in=%d out=%d padded_m=%lu MAX_M=%d\n",
                 op->batchsize, op->in_units, op->out_units, padded_m, FMATMUL_MAX_M);
-        matrix_multiply_scalar_fused(op->input, op->weights, op->bias, op->output,
-                                     op->batchsize, op->in_units, op->out_units);
+        if (op->is_last) {
+            // Terminal layer: FP32 logits.
+            matrix_multiply_scalar_fused(op->input, op->weights, op->bias, op->output,
+                                         op->batchsize, op->in_units, op->out_units);
+        } else {
+            // Hidden layer: compute FP32 into scratch, then narrow to FP16 output.
+            matrix_multiply_scalar_fused(op->input, op->weights, op->bias, fmatmul_c_scratch,
+                                         op->batchsize, op->in_units, op->out_units);
+            size_t nrem = (size_t)op->batchsize * (size_t)op->out_units;
+            const float *src = fmatmul_c_scratch;
+            _Float16 *dst = op->output_f16;
+            while (nrem > 0) {
+                size_t vl;
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(nrem));
+                asm volatile("vle32.v v24, (%0)" :: "r"(src));
+                asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
+                asm volatile("vfncvt.f.f.w v16, v24");
+                asm volatile("vse16.v v16, (%0)" :: "r"(dst) : "memory");
+                src += vl; dst += vl; nrem -= vl;
+            }
+        }
         return;
     }
 
@@ -114,37 +133,59 @@ void fc_op_forward(fc_op *op)
         remaining -= vl;
     }
 
-    size_t mk_padded = (size_t)padded_m * (size_t)op->out_units;
-    float *c_scratch_ptr = fmatmul_c_scratch;
-    while(mk_padded > 0) {
-        size_t vl;
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(mk_padded));
-        asm volatile("vmv.v.i v8, 0");
-        asm volatile("vse32.v v8, (%0)" :: "r"(c_scratch_ptr));
-        c_scratch_ptr += vl;
-        mk_padded -= vl;
-    }
+    if (op->is_last) {
+        // ---- Terminal (logits) layer: FP32 output ----
+        size_t mk_padded = (size_t)padded_m * (size_t)op->out_units;
+        float *c_scratch_ptr = fmatmul_c_scratch;
+        while(mk_padded > 0) {
+            size_t vl;
+            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(mk_padded));
+            asm volatile("vmv.v.i v8, 0");
+            asm volatile("vse32.v v8, (%0)" :: "r"(c_scratch_ptr));
+            c_scratch_ptr += vl;
+            mk_padded -= vl;
+        }
 
-    fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, op->weights, op->bias,
-                 padded_m, (unsigned long int)op->in_units,
-                 (unsigned long int)op->out_units);
+        fmatmul_fused(fmatmul_c_scratch, fmatmul_a_scratch, op->weights, op->bias,
+                     padded_m, (unsigned long int)op->in_units,
+                     (unsigned long int)op->out_units);
 
-    size_t remaining_mk = mk;
-    const float *src_mk = fmatmul_c_scratch;
-    float *dst_mk = op->output;
-    while (remaining_mk > 0)
-    {
-        size_t vl = 0;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
-        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
-        src_mk += vl;
-        dst_mk += vl;
-        remaining_mk -= vl;
+        size_t remaining_mk = mk;
+        const float *src_mk = fmatmul_c_scratch;
+        float *dst_mk = op->output;
+        while (remaining_mk > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+            asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+            asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
+            src_mk += vl;
+            dst_mk += vl;
+            remaining_mk -= vl;
+        }
+    } else {
+        // ---- Hidden layer: FP16 output via fused widening + narrow epilogue ----
+        // No need to pre-zero the scratch: fmatmul_fused_f16out seeds the
+        // accumulator with bias, exactly like fmatmul_fused.
+        fmatmul_fused_f16out(fmatmul_c_scratch_f16, fmatmul_a_scratch, op->weights, op->bias,
+                             padded_m, (unsigned long int)op->in_units,
+                             (unsigned long int)op->out_units);
+
+        size_t remaining_mk = mk;
+        const _Float16 *src_mk = fmatmul_c_scratch_f16;
+        _Float16 *dst_mk = op->output_f16;
+        while (remaining_mk > 0)
+        {
+            size_t vl = 0;
+            asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+            asm volatile("vle16.v v0, (%0);" : : "r"(src_mk) : "memory");
+            asm volatile("vse16.v v0, (%0);" : : "r"(dst_mk) : "memory");
+            src_mk += vl;
+            dst_mk += vl;
+            remaining_mk -= vl;
+        }
     }
 }
-
-static _Float16 d_output_f16_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS] __attribute__((aligned(32)));
 
 void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
@@ -161,10 +202,13 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
         return;
     }
 
-    // DOWNCAST
+    // Narrow the FP32 d_output (loss-scaled) into the dedicated FP16 buffer
+    // d_output_f16, which feeds the FP16 backward matmuls. d_output (FP32) is kept
+    // for the d_bias reduction below. (Terminal layer: op->d_output is set by the
+    // loss; a hidden layer would instead arrive with op->d_output_f16 pre-filled.)
     int n_elems = op->batchsize * op->out_units;
     const float *src_grad = op->d_output;
-    _Float16 *dst_grad = d_output_f16_buf;
+    _Float16 *dst_grad = op->d_output_f16;
 
     while(n_elems > 0) {
         size_t vl;
@@ -183,8 +227,8 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     // d_input calculation
     t0 = fc_cycle_count_local();
     
-    matrix_multiply_nt(d_output_f16_buf, op->weights, op->d_input,
-                       op->batchsize, op->out_units, op->in_units); 
+    matrix_multiply_nt_f16out(op->d_output_f16, op->weights, op->d_input,
+                              op->batchsize, op->out_units, op->in_units);
 
     int64_t elapsed = fc_cycle_count_local() - t0;
     if (cycles) cycles->d_input_cycles += elapsed;
@@ -205,7 +249,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     t0 = fc_cycle_count_local();
     register float *w_deltas = op->d_weights;
 
-    matrix_multiply_tn(op->input, d_output_f16_buf, w_deltas,
+    matrix_multiply_tn(op->input, op->d_output_f16, w_deltas,
                     op->batchsize, op->in_units, op->out_units);
 
     elapsed = fc_cycle_count_local() - t0;
@@ -239,8 +283,12 @@ void fc_op_backward_input_only(fc_op *op)
         for (int j = 0; j < op->out_units; j++)
         {
             register float d_o = op->d_output[p * op->out_units + j];
-            for (int i = 0; i < op->in_units; i++)
-                op->d_input[p * op->in_units + i] += (float)op->weights[i * op->out_units + j] * d_o;
+            for (int i = 0; i < op->in_units; i++) {
+                int idx = p * op->in_units + i;
+                // d_input is FP16: accumulate in FP32, store narrowed.
+                op->d_input[idx] = (_Float16)((float)op->d_input[idx] +
+                                              (float)op->weights[i * op->out_units + j] * d_o);
+            }
         }
     }
 

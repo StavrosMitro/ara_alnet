@@ -21,6 +21,30 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+// KERNEL_DRAIN (FPGA bring-up diagnostic): serialize scalar/vector memory
+// traffic by fencing after every vector load/store. The stock inner loop keeps
+// 8 vfmacc accumulator chains + an in-flight vle64 + 8 scalar fld misses
+// concurrently outstanding -- far more AXI pressure than any passing bring-up
+// test. If the drained kernel completes where the stock one hangs, the
+// LLC/DDR write-path transaction-overrun deadlock is confirmed (same family
+// as the serial.c per-char drain fix). Build with -DKERNEL_DRAIN=1.
+// KERNEL_DRAIN=1: fence only. KERNEL_DRAIN=2: fence + timed delay loop --
+// test_deep_combo proved fences do NOT clear the LLC write-path wedge but
+// real time-spacing does (same as the serial.c per-char drain), so the two
+// variants discriminate ordering-pressure vs in-flight-occupancy deadlocks.
+#ifndef KERNEL_DRAIN
+#define DRAIN()
+#elif KERNEL_DRAIN >= 2
+#define DRAIN()                                                                \
+  do {                                                                         \
+    asm volatile("fence" ::: "memory");                                        \
+    for (volatile int __d = 0; __d < 2000; __d++) {                            \
+    }                                                                          \
+  } while (0)
+#else
+#define DRAIN() asm volatile("fence" ::: "memory")
+#endif
+
 void fmatmul(double *c, const double *a, const double *b,
              const unsigned long int M, const unsigned long int N,
              const unsigned long int P) {
@@ -95,6 +119,7 @@ void fmatmul_vec_4x4(double *c, const double *a, const double *b,
 
   // Prefetch one row of matrix B
   asm volatile("vle64.v v16, (%0);" ::"r"(b));
+    DRAIN();
   b += P;
 
   // Prefetch one row of scalar values
@@ -124,6 +149,7 @@ void fmatmul_vec_4x4(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v20, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v4, %0, v16" ::"f"(t1));
@@ -143,6 +169,7 @@ void fmatmul_vec_4x4(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v16, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t1));
@@ -156,15 +183,19 @@ void fmatmul_vec_4x4(double *c, const double *a, const double *b,
   // Last iteration: store results
   asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
   asm volatile("vse64.v v0, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t1));
   asm volatile("vse64.v v4, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t2));
   asm volatile("vse64.v v8, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t3));
   asm volatile("vse64.v v12, (%0);" ::"r"(c));
+    DRAIN();
 }
 
 // ---------------
@@ -225,6 +256,7 @@ void fmatmul_vec_8x8(double *c, const double *a, const double *b,
 
   // Prefetch one row of matrix B
   asm volatile("vle64.v v18, (%0);" ::"r"(b));
+    DRAIN();
   b += P;
 
   // Prefetch one row of scalar values
@@ -258,6 +290,7 @@ void fmatmul_vec_8x8(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v20, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v2, %0, v18" ::"f"(t1));
@@ -285,6 +318,7 @@ void fmatmul_vec_8x8(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v18, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v2, %0, v20" ::"f"(t1));
@@ -306,27 +340,35 @@ void fmatmul_vec_8x8(double *c, const double *a, const double *b,
   // Last iteration: store results
   asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
   asm volatile("vse64.v v0, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v2, %0, v20" ::"f"(t1));
   asm volatile("vse64.v v2, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t2));
   asm volatile("vse64.v v4, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v6, %0, v20" ::"f"(t3));
   asm volatile("vse64.v v6, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t4));
   asm volatile("vse64.v v8, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v10, %0, v20" ::"f"(t5));
   asm volatile("vse64.v v10, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t6));
   asm volatile("vse64.v v12, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v14, %0, v20" ::"f"(t7));
   asm volatile("vse64.v v14, (%0);" ::"r"(c));
+    DRAIN();
 }
 
 // ---------------
@@ -413,6 +455,7 @@ void fmatmul_vec_16x16(double *c, const double *a, const double *b,
 
   // Prefetch one row of matrix B
   asm volatile("vle64.v v16, (%0);" ::"r"(b));
+    DRAIN();
   b += P;
 
   // Compute the multiplication
@@ -436,6 +479,7 @@ void fmatmul_vec_16x16(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v17, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v1, %0, v16" ::"f"(t1));
@@ -479,6 +523,7 @@ void fmatmul_vec_16x16(double *c, const double *a, const double *b,
 
     // Load one row of B
     asm volatile("vle64.v v16, (%0);" ::"r"(b));
+    DRAIN();
     b += P;
 
     asm volatile("vfmacc.vf v1, %0, v17" ::"f"(t1));
@@ -516,49 +561,65 @@ void fmatmul_vec_16x16(double *c, const double *a, const double *b,
   // Last iteration: store results
   asm volatile("vfmacc.vf v0, %0, v17" ::"f"(t0));
   asm volatile("vse64.v v0, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v1, %0, v17" ::"f"(t1));
   asm volatile("vse64.v v1, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v2, %0, v17" ::"f"(t2));
   asm volatile("vse64.v v2, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v3, %0, v17" ::"f"(t3));
   asm volatile("vse64.v v3, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v4, %0, v17" ::"f"(t4));
   asm volatile("vse64.v v4, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v5, %0, v17" ::"f"(t5));
   asm volatile("vse64.v v5, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v6, %0, v17" ::"f"(t6));
   asm volatile("vse64.v v6, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v7, %0, v17" ::"f"(t7));
   asm volatile("vse64.v v7, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v8, %0, v17" ::"f"(t8));
   asm volatile("vse64.v v8, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v9, %0, v17" ::"f"(t9));
   asm volatile("vse64.v v9, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v10, %0, v17" ::"f"(t10));
   asm volatile("vse64.v v10, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v11, %0, v17" ::"f"(t11));
   asm volatile("vse64.v v11, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v12, %0, v17" ::"f"(t12));
   asm volatile("vse64.v v12, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v13, %0, v17" ::"f"(t13));
   asm volatile("vse64.v v13, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v14, %0, v17" ::"f"(t14));
   asm volatile("vse64.v v14, (%0);" ::"r"(c));
+    DRAIN();
   c += P;
   asm volatile("vfmacc.vf v15, %0, v17" ::"f"(t15));
   asm volatile("vse64.v v15, (%0);" ::"r"(c));
+    DRAIN();
 }

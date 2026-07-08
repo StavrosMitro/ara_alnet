@@ -29,8 +29,34 @@ void fmatmul_fused(float *c, const _Float16 *a, const _Float16 *b,
                    const float *bias, unsigned long int m,
                    unsigned long int n, unsigned long int p);
 
+// Mixed-precision variant: FP16 in/weights, FP32 widening accumulate, FP16 out.
+// Used by hidden (non-terminal) fc layers so activations stay FP16.
+void fmatmul_fused_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                          const float *bias, unsigned long int m,
+                          unsigned long int n, unsigned long int p);
+void fmatmul_4x4_fused_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                              const float *bias, unsigned long int m,
+                              unsigned long int n, unsigned long int p);
+void fmatmul_8x8_fused_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                              const float *bias, unsigned long int m,
+                              unsigned long int n, unsigned long int p);
+void fmatmul_16x16_fused_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                                const float *bias, unsigned long int m,
+                                unsigned long int n, unsigned long int p);
+
 void fmatmul_nt(float *c, const _Float16 *a, const _Float16 *b, unsigned long int m,
                 unsigned long int n, unsigned long int p);
+
+// Mixed-precision variant: FP16 in, FP32 widening accumulate, FP16 out.
+// Computes backward d_input as FP16 (the layer below expects FP16 d_output).
+void fmatmul_nt_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                       unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_4x4_nt_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                           unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_8x8_nt_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                           unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_16x16_nt_f16out(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                             unsigned long int m, unsigned long int n, unsigned long int p);
 void fmatmul_tn(float *c, const _Float16 *a, const _Float16 *b, unsigned long int m,
                 unsigned long int n, unsigned long int p);
 

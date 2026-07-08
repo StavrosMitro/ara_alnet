@@ -26,8 +26,8 @@ include $(COMMON_DIR)/runtime.mk
 include $(COMMON_DIR)/riscv_tests.mk
 include $(COMMON_DIR)/default_args.mk
 
-# Per-app source finder: skip app-local virtualenv and git metadata.
-find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
+# Per-app source finder: skip app-local virtualenv, git metadata, and sshfs mount dirs.
+find_app_sources = $(shell find -L $(1) \( -path "*/.venv" -o -path "*/.git" -o -path "*/sshfs_dir" \) -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.S" \) -print)
 
 APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "main.c"))
 APPS += $(patsubst $(APPS_DIR)/%/main.cpp,%,$(shell find $(APPS_DIR) -name "main.cpp"))
@@ -96,16 +96,16 @@ endif
 
 FC_LAYER_DEFINES := $(FC_LAYER_MODE_DEFINES) $(FC_LAYER_LOSS_DEFINES)
 
-bin/fc_layer:  $(APPS_DIR)/Makefile
-bin/fc_layer%: $(APPS_DIR)/Makefile
-bin/fc_layer:  ENV_DEFINES += $(FC_LAYER_DEFINES)
-bin/fc_layer%: ENV_DEFINES += $(FC_LAYER_DEFINES)
-bin/fc_layer:  AUTOVECTORIZE = 0
-bin/fc_layer%: AUTOVECTORIZE = 0
-bin/fc_layer:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
-bin/fc_layer%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:   $(APPS_DIR)/Makefile
+bin/fc_layer.%: $(APPS_DIR)/Makefile
+bin/fc_layer:   ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer.%: ENV_DEFINES += $(FC_LAYER_DEFINES)
+bin/fc_layer:   AUTOVECTORIZE = 0
+bin/fc_layer.%: AUTOVECTORIZE = 0
+bin/fc_layer:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer.%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
+bin/fc_layer.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer
 
 fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
@@ -249,12 +249,77 @@ bin/fc_layer_test:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer_test
 fc_layer_test/main.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 fc_layer_test/main.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
+# ---------------------------------------------------------------------------
+# fc_layer16only: pure FP16 fully-connected layer
+# ---------------------------------------------------------------------------
+FC_LAYER16ONLY_MODE ?= train
+FC_LAYER16ONLY_LOSS ?= MSE
+FC_LAYER16ONLY_BATCHSIZE ?= 16
+FC_LAYER16ONLY_EPOCHS ?= 1
+FC_LAYER16ONLY_INFER_IDX ?= -1
+FC_LAYER16ONLY_STATIC_MAX_BATCH ?= $(FC_LAYER16ONLY_BATCHSIZE)
+FC_LAYER16ONLY_SAMPLES ?= $(FC_LAYER16ONLY_BATCHSIZE)
+
+ifeq ($(FC_LAYER16ONLY_MODE),train)
+FC_LAYER16ONLY_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER16ONLY_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER16ONLY_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER16ONLY_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER16ONLY_SAMPLES)
+else ifeq ($(FC_LAYER16ONLY_MODE),inference)
+FC_LAYER16ONLY_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(FC_LAYER16ONLY_INFER_IDX)
+else
+$(error Unsupported FC_LAYER16ONLY_MODE='$(FC_LAYER16ONLY_MODE)'. Use train or inference)
+endif
+
+ifeq ($(FC_LAYER16ONLY_LOSS),MSE)
+FC_LAYER16ONLY_LOSS_DEFINES := -DSET_MSE
+else ifeq ($(FC_LAYER16ONLY_LOSS),CEL)
+FC_LAYER16ONLY_LOSS_DEFINES := -DSET_CEL
+else
+$(error Unsupported FC_LAYER16ONLY_LOSS='$(FC_LAYER16ONLY_LOSS)'. Use MSE or CEL)
+endif
+
+FC_LAYER16ONLY_DEFINES := $(FC_LAYER16ONLY_MODE_DEFINES) $(FC_LAYER16ONLY_LOSS_DEFINES)
+
+bin/fc_layer16only:  $(APPS_DIR)/Makefile
+bin/fc_layer16only%: $(APPS_DIR)/Makefile
+bin/fc_layer16only:  ENV_DEFINES += $(FC_LAYER16ONLY_DEFINES)
+bin/fc_layer16only%: ENV_DEFINES += $(FC_LAYER16ONLY_DEFINES)
+bin/fc_layer16only:  AUTOVECTORIZE = 0
+bin/fc_layer16only%: AUTOVECTORIZE = 0
+bin/fc_layer16only:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16only
+bin/fc_layer16only%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/fc_layer16only
+
+fc_layer16only/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# Compile data.S from within fc_layer16only/ so that .incbin resolves
+# "generated_data/..." relative to the app dir, not the apps/ CWD.
+# Without this, a stray apps/generated_data/ on the server confuses LLVM.
+fc_layer16only/data.S.o: fc_layer16only/data.S
+	cd $(APPS_DIR)/fc_layer16only && $(RISCV_CC) $(RISCV_CCFLAGS) -c data.S -o $(APPS_DIR)/fc_layer16only/data.S.o
+
+fc_layer16only/data.S.o.spike: fc_layer16only/data.S patch-spike-crt0
+	cd $(APPS_DIR)/fc_layer16only && $(RISCV_CC) $(RISCV_CCFLAGS_SPIKE) -c data.S -o $(APPS_DIR)/fc_layer16only/data.S.o.spike
+
 # conv_layer profile controls (mirrors fc_layer semantics)
 CONV_LAYER_MODE ?= train
-CONV_LAYER_BATCHSIZE ?= 2
+CONV_LAYER_BATCHSIZE ?= 1
 CONV_LAYER_EPOCHS ?= 1
 CONV_LAYER_INFER_IDX ?= -1
 CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
+
+# Spatial / channel dimensions — override to benchmark different configs.
+# Kernel stays 3x3; same-padding so OUT_H=IN_H, OUT_W=IN_W.
+# Remember to re-run the Python script with matching args before building:
+#   python3 conv_layer/scripts/generate_conv_test_vectors.py \
+#       --batch $(CONV_LAYER_BATCHSIZE) --c-in $(CONV_LAYER_C_IN) \
+#       --c-out $(CONV_LAYER_C_OUT) --h $(CONV_LAYER_H) --w $(CONV_LAYER_W)
+CONV_LAYER_C_IN  ?= 1
+CONV_LAYER_C_OUT ?= 1
+CONV_LAYER_H     ?= 1
+CONV_LAYER_W     ?= 16
+
+# im2col scratch for layer 1 (one image): C_IN * 9 * H * W
+CONV_LAYER_XCOL_ELEMS := $(shell expr $(CONV_LAYER_C_IN) \* 9 \* $(CONV_LAYER_H) \* $(CONV_LAYER_W))
 
 ifeq ($(CONV_LAYER_MODE),train)
 CONV_LAYER_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(CONV_LAYER_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(CONV_LAYER_EPOCHS)
@@ -264,7 +329,14 @@ else
 $(error Unsupported CONV_LAYER_MODE='$(CONV_LAYER_MODE)'. Use train or inference)
 endif
 
-CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES)
+CONV_LAYER_DIM_DEFINES := \
+    -DCONV1_IN_CHANNELS=$(CONV_LAYER_C_IN)   \
+    -DCONV1_OUT_CHANNELS=$(CONV_LAYER_C_OUT)  \
+    -DCONV1_IN_H=$(CONV_LAYER_H) -DCONV1_IN_W=$(CONV_LAYER_W) \
+    -DCONV1_OUT_H=$(CONV_LAYER_H) -DCONV1_OUT_W=$(CONV_LAYER_W) \
+    -DCONV1_XCOL_ELEMS=$(CONV_LAYER_XCOL_ELEMS)
+
+CONV_LAYER_DEFINES := $(CONV_LAYER_MODE_DEFINES) $(CONV_LAYER_DIM_DEFINES)
 
 bin/conv_layer:  $(APPS_DIR)/Makefile
 bin/conv_layer%: $(APPS_DIR)/Makefile
@@ -283,6 +355,62 @@ conv_layer/%.c.o: $(APPS_DIR)/Makefile
 conv_layer/%.S.o: $(APPS_DIR)/Makefile
 conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
 conv_layer/%.S.o.spike: $(APPS_DIR)/Makefile
+
+# conv_layer_mixed profile controls (mirrors fc_layer semantics)
+CONV_LAYER_MIXED_MODE ?= train
+CONV_LAYER_MIXED_BATCHSIZE ?= 1
+CONV_LAYER_MIXED_EPOCHS ?= 1
+CONV_LAYER_MIXED_INFER_IDX ?= -1
+CONV_LAYER_MIXED_STATIC_MAX_BATCH ?= $(CONV_LAYER_MIXED_BATCHSIZE)
+
+# Spatial / channel dimensions — override to benchmark different configs.
+# Kernel stays 3x3; same-padding so OUT_H=IN_H, OUT_W=IN_W.
+# Remember to re-run the Python script with matching args before building:
+#   python3 conv_layer_mixed/scripts/generate_conv_test_vectors.py \
+#       --batch $(CONV_LAYER_MIXED_BATCHSIZE) --c-in $(CONV_LAYER_MIXED_C_IN) \
+#       --c-out $(CONV_LAYER_MIXED_C_OUT) --h $(CONV_LAYER_MIXED_H) --w $(CONV_LAYER_MIXED_W)
+CONV_LAYER_MIXED_C_IN  ?= 1
+CONV_LAYER_MIXED_C_OUT ?= 1
+CONV_LAYER_MIXED_H     ?= 1
+CONV_LAYER_MIXED_W     ?= 16
+
+# im2col scratch for layer 1 (one image): C_IN * 9 * H * W
+CONV_LAYER_MIXED_XCOL_ELEMS := $(shell expr $(CONV_LAYER_MIXED_C_IN) \* 9 \* $(CONV_LAYER_MIXED_H) \* $(CONV_LAYER_MIXED_W))
+
+ifeq ($(CONV_LAYER_MIXED_MODE),train)
+CONV_LAYER_MIXED_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(CONV_LAYER_MIXED_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER_MIXED_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(CONV_LAYER_MIXED_EPOCHS)
+else ifeq ($(CONV_LAYER_MIXED_MODE),inference)
+CONV_LAYER_MIXED_MODE_DEFINES := -DALEXNET_MODE_INFERENCE -DALEXNET_INFER_IDX=$(CONV_LAYER_MIXED_INFER_IDX)
+else
+$(error Unsupported CONV_LAYER_MIXED_MODE='$(CONV_LAYER_MIXED_MODE)'. Use train or inference)
+endif
+
+CONV_LAYER_MIXED_DIM_DEFINES := \
+    -DCONV1_IN_CHANNELS=$(CONV_LAYER_MIXED_C_IN)   \
+    -DCONV1_OUT_CHANNELS=$(CONV_LAYER_MIXED_C_OUT)  \
+    -DCONV1_IN_H=$(CONV_LAYER_MIXED_H) -DCONV1_IN_W=$(CONV_LAYER_MIXED_W) \
+    -DCONV1_OUT_H=$(CONV_LAYER_MIXED_H) -DCONV1_OUT_W=$(CONV_LAYER_MIXED_W) \
+    -DCONV1_XCOL_ELEMS=$(CONV_LAYER_MIXED_XCOL_ELEMS)
+
+CONV_LAYER_MIXED_DEFINES := $(CONV_LAYER_MIXED_MODE_DEFINES) $(CONV_LAYER_MIXED_DIM_DEFINES)
+
+bin/conv_layer_mixed:  $(APPS_DIR)/Makefile
+bin/conv_layer_mixed%: $(APPS_DIR)/Makefile
+bin/conv_layer_mixed:  ENV_DEFINES += $(CONV_LAYER_MIXED_DEFINES)
+bin/conv_layer_mixed%: ENV_DEFINES += $(CONV_LAYER_MIXED_DEFINES)
+bin/conv_layer_mixed:  AUTOVECTORIZE = 0
+bin/conv_layer_mixed%: AUTOVECTORIZE = 0
+bin/conv_layer_mixed:  RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer_mixed
+bin/conv_layer_mixed%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer_mixed
+bin/conv_layer_mixed:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer_mixed
+bin/conv_layer_mixed%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer_mixed
+
+conv_layer_mixed/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+conv_layer_mixed/%.c.o: $(APPS_DIR)/Makefile
+conv_layer_mixed/%.S.o: $(APPS_DIR)/Makefile
+conv_layer_mixed/%.c.o.spike: $(APPS_DIR)/Makefile
+conv_layer_mixed/%.S.o.spike: $(APPS_DIR)/Makefile
 
 all: $(BINARIES)
 
@@ -412,8 +540,10 @@ benchmarks_clean:
 	rm -vf kernel/*.c.*
 
 .PHONY: clean
-clean: riscv_tests_spike_clean benchmarks_clean
+clean: benchmarks_clean
 	rm -vf $(BINARIES)
+	rm -vf $(addsuffix .spike,$(BINARIES))
+	rm -vf $(addsuffix .spike.dump,$(BINARIES))
 	rm -vf $(CVA6_BINARIES)
 	rm -vf $(ARA_BINARIES)
 	rm -vf $(addsuffix .dump,$(BINARIES))

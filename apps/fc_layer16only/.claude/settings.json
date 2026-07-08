@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/stavros/ara/apps/**)",
+      "Bash(time find -L /home/stavros/ara/apps/fc_layer16only \\\\\\( -path \"*/.venv\" -o -path \"*/.git\" \\\\\\) -prune -o \\\\\\( -name \"*.c\" -o -name \"*.cpp\" -o -name \"*.S\" \\\\\\) -print)",
+      "Bash(make bin/fc_layer16only)",
+      "Bash(python3 scripts/generate_fc_test_vectors.py --samples 16)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -n \"RISCV_SIM\\\\b\\\\|RISCV_SIM_OPT\" /home/stavros/ara/apps/../common.mk 2>/dev/null | head -20; grep -rn \"RISCV_SIM\\\\b\\\\|RISCV_SIM_OPT\" /home/stavros/ara/apps/ --include=\"*.mk\" 2>/dev/null | head -20; find /home/stavros/ara -name \"*.mk\" 2>/dev/null | head -10)",
+      "Read(//home/stavros/ara/**)",
+      "Bash(awk 'NR>=61207 && NR<=61450' /home/stavros/ara/apps/bin/fc_layer16only.spike.dump)",
+      "Bash(awk 'NR>=61650 && NR<=61800' /home/stavros/ara/apps/bin/fc_layer16only.spike.dump)",
+      "Bash(nm /home/stavros/ara/apps/bin/fc_layer16only.spike)",
+      "Bash(/home/stavros/ara/install/riscv-isa-sim/bin/spike --isa=rv64gcv_zfh --varch=\"vlen:1024,elen:64\" bin/fc_layer16only.spike)",
+      "Bash(python3 -)",
+      "Bash(file /home/stavros/ara/apps/fc_layer_test/fp16/* /home/stavros/ara/apps/fc_layer_test/fp32/*)",
+      "Bash(mkdir -p /home/stavros/ara/apps/fc_layer_test/fp16pure)",
+      "Bash(ln -s ../../fc_layer16only/kernel/matrix.h matrix.h)",
+      "Bash(ln -s ../../fc_layer16only/kernel/matrix.c matrix.c)",
+      "Bash(ln -s ../../fc_layer16only/kernel/fmatmul.h fmatmul.h)",
+      "Bash(ln -s ../../fc_layer16only/kernel/fmatmul.c fmatmul.c)",
+      "Bash(ln -s ../../fc_layer16only/kernel/fc_layer.h fc_layer.h)",
+      "Bash(ln -s ../../fc_layer/kernel/fmatmul_fused.c fmatmul_fused.c)",
+      "Bash(ln -s ../../fc_layer/kernel/fmatmul_nt.c fmatmul_nt.c)",
+      "Bash(ln -s ../../fc_layer/kernel/fmatmul_tn.c fmatmul_tn.c)",
+      "Bash(ln -s ../../fc_layer/kernel/fmatmul_deferred.c fmatmul_deferred.c)",
+      "Bash(mount)",
+      "Read(//home/stavros/**)",
+      "Bash(find /home/stavros/ara/apps/fc_layer16only/sshfs_dir/ -name \"nohup*\" 2>/dev/null; ls /home/stavros/ara/apps/fc_layer16only/sshfs_dir/../ | grep -i nohup 2>/dev/null; ls /home/smitropoulos/ 2>/dev/null)",
+      "Read(//home/stavros/ara/apps/fc_layer16only//**)",
+      "Read(//home/**)",
+      "Bash(ls /home/stavros/ara/apps/fc_layer16only/sshfs_dir/../../../ 2>/dev/null | head -20)",
+      "Read(//home/stavros/ara//**)"
+    ],
+    "additionalDirectories": [
+      "/home/stavros/ara/apps",
+      "/home/stavros/ara/hardware"
+    ]
+  }
+}

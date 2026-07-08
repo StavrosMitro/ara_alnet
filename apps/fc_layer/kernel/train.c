@@ -26,7 +26,7 @@
 // train.c is compiled with -O0 in this app profile; bind timer calls to
 // runtime counter primitives to avoid unresolved inline symbols.
 static inline int64_t alexnet_cycle_count_local(void)
-{
+{   
     int64_t cycle_count = 0;
     asm volatile("fence; csrr %0, cycle" : "=r"(cycle_count));
     return cycle_count;
@@ -34,6 +34,15 @@ static inline int64_t alexnet_cycle_count_local(void)
 
 // #define LEARNING_RATE 0.001
 #define LEARNING_RATE 0.00001f
+
+// AMP static loss scaling. The gradient is multiplied by LOSS_SCALE before it is
+// narrowed to FP16 in the backward matmuls (protects small gradients from FP16
+// underflow), then d_weights/d_bias are divided back by LOSS_SCALE in FP32 before
+// the optimizer (the "unscale" step) so the effective learning rate is unchanged.
+// d_input intentionally keeps the scale so it propagates to previous layers.
+#ifndef LOSS_SCALE
+#define LOSS_SCALE 1024.0f
+#endif
 
 #ifndef ALEXNET_USE_MOMENTUM
 #define ALEXNET_USE_MOMENTUM 1
@@ -74,7 +83,12 @@ static inline int64_t alexnet_cycle_count_local(void)
 static float d_fc1_weights[FC_INPUT_UNITS * FC_OUTPUT_UNITS];
 
 static float d_fc1_bias[FC_OUTPUT_UNITS];
+// FP32 d_output gradient (from the FP32 loss). Used directly for d_bias (FP32),
+// and narrowed into d_fc1_output_f16_buf for the FP16 backward matmuls.
 static float d_fc1_output_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
+// Dedicated FP16 buffer: the narrowed (loss-scaled) d_output that feeds the FP16
+// backward matmuls (d_input, d_weights). This is the head of the FP16 grad chain.
+static _Float16 d_fc1_output_f16_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
 
 static float mse_targets_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
 
@@ -95,7 +109,8 @@ static float mse_targets_buf[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
         IN_CHANNELS * FEATURE0_L * FEATURE0_L)
 
 // Shared ping-pong buffers for inter-layer gradient propagation.
-static float d_grad_ping_0[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
+// d_input is FP16 (feeds the previous layer's FP16 d_output).
+static _Float16 d_grad_ping_0[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
 
 static _Float16 train_input_buf[ALEXNET_STATIC_MAX_BATCH * FC_INPUT_UNITS];
 _Float16 fc1_weights_f16[FC_INPUT_UNITS * FC_OUTPUT_UNITS];
@@ -138,6 +153,23 @@ static void zero_f32_vec(float *buf, int n)
 
         asm volatile("vse32.v v8, (%0)" :: "r"(ptr));
 
+        ptr += vl;
+        n -= vl;
+    }
+}
+
+// FP16 vectorized zero, for the FP16 d_input buffer.
+static void zero_f16_vec(_Float16 *buf, int n)
+{
+    size_t max_vl;
+    asm volatile("vsetvli %0, zero, e16, m8, ta, ma" : "=r"(max_vl));
+    asm volatile("vmv.v.i v8, 0");
+
+    _Float16 *ptr = buf;
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vse16.v v8, (%0)" :: "r"(ptr));
         ptr += vl;
         n -= vl;
     }
@@ -191,11 +223,13 @@ static float cross_entropy_loss(float *delta_preds, const float *preds, const in
 
         for (int i = 0; i < units; i++)
         {
+            // Loss scaling (see LOSS_SCALE): gradient stored scaled; unscaled in
+            // FP32 on d_weights/d_bias before the optimizer.
             if (labels[p] == i) {
-                delta_preds[p * units + i] = exp(preds[i+p*units] - max_val) / esum - 1;
+                delta_preds[p * units + i] = (exp(preds[i+p*units] - max_val) / esum - 1) * LOSS_SCALE;
             }else {
-                delta_preds[p * units + i] = exp(preds[i+p*units] - max_val) / esum;
-            } 
+                delta_preds[p * units + i] = (exp(preds[i+p*units] - max_val) / esum) * LOSS_SCALE;
+            }
         }
     }
     ce_loss /= BATCH_SIZE;
@@ -209,54 +243,13 @@ static float v_fc1_bias[FC_OUTPUT_UNITS];
 
 
 
-static inline void CLIP(float *x, float down, float up)
-{
-    *x = MIN(up, MAX(down, *x));
-}
-
-/* ---- Scalar SGD: FP32 weights (used for biases) ---- */
-static void momentum_sgd_f32(float *w, float *v_w, float *d_w, int units)
-{
-    static int debug_once_f32 = 0;
-    if (!debug_once_f32) {
-        printf_("momentum_sgd_f32: w=%p v=%p d=%p units=%d\n", w, v_w, d_w, units);
-        debug_once_f32 = 1;
-    }
-    for (int i = 0; i < units; i++)
-    {
-#if ALEXNET_USE_MOMENTUM
-        v_w[i] = 0.9f * v_w[i] - LEARNING_RATE * d_w[i];
-        CLIP(v_w + i, -1.0f, 1.0f);
-        w[i] = w[i] + v_w[i];
-#else
-        (void)v_w;
-        w[i] = w[i] - LEARNING_RATE * d_w[i];
-#endif
-    }
-}
-
-/* ---- Scalar SGD: _Float16 weights ---- */
-static void momentum_sgd_f16(_Float16 *w, float *v_w, float *d_w, int units)
-{
-    static int debug_once_f16 = 0;
-    if (!debug_once_f16) {
-        printf_("momentum_sgd_f16: w=%p v=%p d=%p units=%d\n", w, v_w, d_w, units);
-        debug_once_f16 = 1;
-    }
-    for (int i = 0; i < units; i++)
-    {
-#if ALEXNET_USE_MOMENTUM
-        v_w[i] = 0.9f * v_w[i] - LEARNING_RATE * d_w[i];
-        CLIP(v_w + i, -1.0f, 1.0f);
-        w[i] = (_Float16)((float)w[i] + v_w[i]);
-#else
-        (void)v_w;
-        w[i] = (_Float16)((float)w[i] - LEARNING_RATE * d_w[i]);
-#endif
-    }
-}
-
-/* ---- Vector SGD: FP32 weights (used for biases) ---- */
+/* ---- Vector SGD: FP32 master weights (the ONLY optimizer path) ----
+ *
+ * AMP rule: master weights, velocity and gradients are all FP32. The in-place
+ * FP16 update variants were removed — at small learning rates they suffer
+ * update swamping (lr*grad rounds to zero in FP16). The disposable FP16 weight
+ * copy for the compute passes is regenerated by f32_to_f16_vec after each step.
+ */
 static void momentum_sgd_vec_f32(float *w, float *v_w, const float *d_w, int units)
 {
     float lr = LEARNING_RATE;
@@ -299,75 +292,18 @@ static void momentum_sgd_vec_f32(float *w, float *v_w, const float *d_w, int uni
 #endif
 }
 
-/* ---- Vector SGD: _Float16 weights (used for fc weights) ----
- *
- * Register map for widening MAC pattern (LMUL constraint):
- *   e16, m4  → v20-v23 : FP16 weight source / FP16 weight destination
- *   e32, m8  → v24-v31 : FP32 widened weights (vfwcvt dest, vfncvt src)
- *   e32, m8  →  v8-v15 : FP32 velocity
- *   e32, m8  → v16-v23 : FP32 gradients (v20-v23 overlap is safe: FP16
- *                          source already consumed by vfwcvt before load)
- */
-static void momentum_sgd_vec_f16(_Float16 *w, float *v_w, const float *d_w, int units)
+// In-place FP32 vector scale, used to unscale gradients by 1/LOSS_SCALE.
+static void scale_f32_vec(float *buf, float scale, int n)
 {
-    float lr = LEARNING_RATE;
-    int n = units;
-
-#if ALEXNET_USE_MOMENTUM
-    float momentum = 0.9f;
-    float clip_min = -1.0f;
-    float clip_max = 1.0f;
-
     while (n > 0) {
         size_t vl;
-
-        /* Step 1-3: load FP16 weights and widen to FP32 */
-        asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
-        asm volatile("vle16.v v20, (%0)" :: "r"(w));
-        asm volatile("vfwcvt.f.f.v v24, v20");   /* v20-v23 (FP16) → v24-v31 (FP32) */
-
-        /* Step 4-5: switch to FP32 and load velocity + gradients */
-        asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(vl));
-        asm volatile("vle32.v v8,  (%0)" :: "r"(v_w));   /* velocity  v8-v15  */
-        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));   /* gradients v16-v23 */
-
-        /* Step 6: FP32 momentum SGD math */
-        asm volatile("vfmul.vf  v8, v8, %0"   :: "f"(momentum));  /* v = 0.9*v          */
-        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));        /* v = v - lr*grad    */
-        asm volatile("vfmax.vf  v8, v8, %0"   :: "f"(clip_min));  /* clip low           */
-        asm volatile("vfmin.vf  v8, v8, %0"   :: "f"(clip_max));  /* clip high          */
-        asm volatile("vfadd.vv  v24, v24, v8");                    /* w_fp32 = w + v     */
-        asm volatile("vse32.v   v8,  (%0)" :: "r"(v_w));          /* store velocity     */
-
-        /* Step 7-9: narrow FP32 result back to FP16 and store */
-        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
-        asm volatile("vfncvt.f.f.w v20, v24");   /* v24-v31 (FP32) → v20-v23 (FP16) */
-        asm volatile("vse16.v v20, (%0)" :: "r"(w));
-
-        w += vl; v_w += vl; d_w += vl; n -= vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle32.v v8, (%0)" :: "r"(buf));
+        asm volatile("vfmul.vf v8, v8, %0" :: "f"(scale));
+        asm volatile("vse32.v v8, (%0)" :: "r"(buf));
+        buf += vl; n -= vl;
     }
-#else
-    (void)v_w;
-    while (n > 0) {
-        size_t vl;
-
-        asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
-        asm volatile("vle16.v v20, (%0)" :: "r"(w));
-        asm volatile("vfwcvt.f.f.v v24, v20");
-
-        asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(vl));
-        asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
-        asm volatile("vfnmsac.vf v24, %0, v16" :: "f"(lr));  /* w = w - lr*grad */
-
-        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
-        asm volatile("vfncvt.f.f.w v20, v24");
-        asm volatile("vse16.v v20, (%0)" :: "r"(w));
-
-        w += vl; d_w += vl; n -= vl;
-    }
-#endif
 }
-
 
 static void f32_to_f16_vec(const float *src, _Float16 *dst, int n)
 {
@@ -457,14 +393,19 @@ static float mse_loss(float *delta_preds, const float *preds, const float *targe
     return mse_loss_val;
 }
 
+// FP32 loss and FP32 gradient. preds/targets/delta_preds are FP32 (the loss runs
+// only on the terminal layer, whose logits are FP32). The loss VALUE uses the
+// UNSCALED diff; the stored gradient is scaled by LOSS_SCALE. The FP16 narrowing
+// for the backward matmuls happens later, into a separate d_output_f16 buffer.
 static float mse_loss_vec(float *delta_preds, const float *preds, const float *targets, int units, int BATCH_SIZE)
 {
     int total_elems = BATCH_SIZE * units;
     float scale_factor = 0.5f / (float)total_elems;
+    float loss_scale = LOSS_SCALE;
 
     size_t max_vl;
     asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(max_vl));
-    asm volatile("vmv.v.i v8, 0");
+    asm volatile("vmv.v.i v8, 0");   // FP32 loss accumulator (v8-v15)
 
     int n = total_elems;
     const float *p_ptr = preds;
@@ -475,13 +416,14 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
         size_t vl;
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
 
-        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr)); // preds
-        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr)); // targets
+        asm volatile("vle32.v v16, (%0)" :: "r"(p_ptr)); // preds  (v16-v23)
+        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr)); // targets(v24-v31)
 
         asm volatile("vfsub.vv v16, v16, v24");           // diff = p - t
+        asm volatile("vfmacc.vv v8, v16, v16");           // loss accumulates UNSCALED diff^2
 
-        asm volatile("vfmacc.vv v8, v16, v16");
-
+        // Loss scaling: store the FP32 gradient scaled by LOSS_SCALE.
+        asm volatile("vfmul.vf v16, v16, %0" :: "f"(loss_scale));
         asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
 
         p_ptr += vl;
@@ -522,8 +464,8 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
         exit(1);
     }
 
-    float *curr_grad = d_fc1_output_buf;
-    float *next_grad = d_grad_ping_0;
+    float *curr_grad = d_fc1_output_buf;      // FP32 d_output (loss-scaled gradient)
+    _Float16 *next_grad = d_grad_ping_0;
     float loss_val = 0.0f;
     int64_t t0 = 0;
 
@@ -537,9 +479,13 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
 
     net->fc1.d_input = next_grad;
     t0 = alexnet_cycle_count_local();
-    zero_f32_vec(net->fc1.d_input, net->batchsize * net->fc1.in_units);
+    zero_f16_vec(net->fc1.d_input, net->batchsize * net->fc1.in_units);
     last_zero_dinput_cycles = alexnet_cycle_count_local() - t0;
+    // d_output stays FP32 (loss output, used for d_bias). The dedicated FP16
+    // buffer d_output_f16 is filled by the narrow in fc_op_backward and feeds the
+    // FP16 backward matmuls (d_input, d_weights).
     net->fc1.d_output = curr_grad;
+    net->fc1.d_output_f16 = d_fc1_output_f16_buf;
 
     // printf_("\n--- BEFORE BACKWARD ---\n");
     // printf_("Weights Pointer: 0x%lx\n", (uintptr_t)net->fc1.weights);
@@ -549,6 +495,14 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
         t0 = alexnet_cycle_count_local();
         fc_op_backward_full_profile(&(net->fc1), &last_fc_backward_breakdown);
         last_fc_backward_total_cycles = alexnet_cycle_count_local() - t0;
+
+        // Unscale (AMP): d_weights/d_bias were computed from the LOSS_SCALE-scaled
+        // gradient. Divide them back by LOSS_SCALE in FP32 before the optimizer so
+        // the effective learning rate is unchanged. d_input keeps the scale.
+        float inv_loss_scale = 1.0f / (float)LOSS_SCALE;
+        scale_f32_vec(net->fc1.d_weights, inv_loss_scale,
+                      net->fc1.in_units * net->fc1.out_units);
+        scale_f32_vec(net->fc1.d_bias, inv_loss_scale, net->fc1.out_units);
     } else {
         fc_op_backward_input_only(&(net->fc1));
         last_fc_backward_breakdown.d_input_cycles = 0;

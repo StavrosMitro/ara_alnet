@@ -10,6 +10,9 @@ void matrix_multiply_fused(const _Float16 *a, const _Float16 *b, const float *bi
 						   float *c, const int M, const int N, const int K);
 void matrix_multiply_nt(const _Float16 *a, const _Float16 *b, float *c,
 						const int M, const int N, const int K);
+// FP16-output d_input (c = a * b^T, c is _Float16). Overwrite semantics.
+void matrix_multiply_nt_f16out(const _Float16 *a, const _Float16 *b, _Float16 *c,
+                               const int M, const int N, const int K);
 void matrix_multiply_tn(const _Float16 *a, const _Float16 *b, float *c,
                         const int M, const int N, const int K);
 void matrix_multiply_nt_deferred(const _Float16 *a, const _Float16 *b, float *c,
@@ -26,4 +29,5 @@ void matrix_multiply_scalar(const _Float16 *a, const _Float16 *b, float *c,
 
 // extern float fmatmul_a_scratch[];
 extern float fmatmul_c_scratch[];
+extern _Float16 fmatmul_c_scratch_f16[];
 extern float shared_memory_pool[];

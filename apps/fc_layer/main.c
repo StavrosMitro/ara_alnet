@@ -349,7 +349,10 @@ void setup_alexnet(alexnet *net, short batchsize)
     net->fc1.in_units = 2048;
     net->fc1.out_units = FC6_LAYER;
     net->fc1.layer_id = 1;
-    
+    // fc1 is the terminal (logits) layer in this harness: FP32 output + FP32 loss.
+    // Set is_last = 0 for a hidden fc layer to route it through the FP16 path.
+    net->fc1.is_last = 1;
+
     alexnet_set_all_trainable(net, 1);
 }
 

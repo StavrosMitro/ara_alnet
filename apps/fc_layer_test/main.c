@@ -38,6 +38,15 @@
 #include "fp16/fc_layer.h"
 
 // ---------------------------------------------------------------------------
+//  Pure-FP16 tree (fc_layer16only).
+//  matrix_multiply_16 / matrix_multiply_nt_16 / ... use _16 suffix so they
+//  coexist with the mixed-precision symbols above without name clashes.
+//  fc_op_forward_p16 is provided by the fp16pure/fc_layer_p16.c shim.
+// ---------------------------------------------------------------------------
+#include "fp16pure/matrix.h"
+#include "fp16pure/fc_layer_p16.h"
+
+// ---------------------------------------------------------------------------
 //  Interfaces of the FP32 reference tree, declared BY HAND.
 //  We do NOT #include the fp32 headers: they reuse the same include guards
 //  (FMATMUL_H, ...) and the same struct tag (fc_op) as the FP16 headers, so
@@ -144,6 +153,13 @@ static float    dbias32[OUT];
 // Optimizer / flow velocity (FP32 master) buffers.
 static float    v_w32[IN * OUT];
 static float    v_w16[IN * OUT];          // velocity stays FP32 even for FP16 weights
+
+// Pure FP16 buffers — output of _16-suffixed ops is _Float16, not float.
+static _Float16 bias_f16[OUT];            // FP16 bias for matrix_multiply_fused_16 / fc_op_forward_p16
+static _Float16 Rp16[IN * OUT];           // raw pure FP16 matrix result
+static float    Rp16_w[IN * OUT];         // widened to float for compare_f32
+static _Float16 outp16[BATCH * OUT];      // pure FP16 forward output
+static float    outp16_w[BATCH * OUT];    // widened
 
 // ===========================================================================
 //  Deterministic data generation (so FP16 and FP32 paths get identical inputs).
@@ -374,6 +390,9 @@ static void init_inputs(void)
     // A plausible upstream gradient dL/dy.
     for (int i = 0; i < BATCH * OUT; i++) dout_f32[i] = frand_sym(0.5f);
     cast_f32_to_f16(dout_f32, dout_f16, BATCH * OUT);
+
+    // FP16 bias for pure-FP16 ops (fc_op_p16.bias is _Float16 *).
+    cast_f32_to_f16(bias_f32, bias_f16, OUT);
 }
 
 // ===========================================================================
@@ -381,42 +400,70 @@ static void init_inputs(void)
 // ===========================================================================
 static void test_matmul_variants(void)
 {
-    printf_("\n--- PART 1a: matrix_multiply variants (FP16 vs FP32) ---\n");
+    printf_("\n--- PART 1a: matrix_multiply three-way (mixed FP16 | pure FP16 | FP32) ---\n");
+
+    // Each kernel: compute all three results once, then report all three pairs.
+    // [mixed/fp32]  [pure/fp32]  [mixed/pure]
 
     // C[BATCH x OUT] = A[BATCH x IN] . W[IN x OUT]
     memset(R16, 0, sizeof(float) * BATCH * OUT);
     memset(R32, 0, sizeof(float) * BATCH * OUT);
+    memset(Rp16, 0, sizeof(Rp16));
     matrix_multiply(A_f16, W_f16, R16, BATCH, IN, OUT);
     matrix_multiply_32(A_f32, W_f32, R32, BATCH, IN, OUT);
-    report("matrix_multiply", compare_f32(R16, R32, BATCH * OUT), BATCH * OUT);
+    matrix_multiply_16(A_f16, W_f16, Rp16, BATCH, IN, OUT);
+    widen_f16_to_f32(Rp16, Rp16_w, BATCH * OUT);
+    report("matrix_multiply     [mixed/fp32]", compare_f32(R16,    R32,    BATCH * OUT), BATCH * OUT);
+    report("matrix_multiply_16  [pure/fp32] ", compare_f32(Rp16_w, R32,    BATCH * OUT), BATCH * OUT);
+    report("matrix_multiply     [mixed/pure]", compare_f32(R16,    Rp16_w, BATCH * OUT), BATCH * OUT);
 
-    // Fused: C = A.W + bias
+    // Fused: C = A.W + bias  (bias is float for mixed/fp32, _Float16 for pure)
     memset(R16, 0, sizeof(float) * BATCH * OUT);
     memset(R32, 0, sizeof(float) * BATCH * OUT);
+    memset(Rp16, 0, sizeof(Rp16));
     matrix_multiply_fused(A_f16, W_f16, bias_f32, R16, BATCH, IN, OUT);
     matrix_multiply_fused_32(A_f32, W_f32, bias_f32, R32, BATCH, IN, OUT);
-    report("matrix_multiply_fused", compare_f32(R16, R32, BATCH * OUT), BATCH * OUT);
+    matrix_multiply_fused_16(A_f16, W_f16, bias_f16, Rp16, BATCH, IN, OUT);
+    widen_f16_to_f32(Rp16, Rp16_w, BATCH * OUT);
+    report("matrix_multiply_fused     [mixed/fp32]", compare_f32(R16,    R32,    BATCH * OUT), BATCH * OUT);
+    report("matrix_multiply_fused_16  [pure/fp32] ", compare_f32(Rp16_w, R32,    BATCH * OUT), BATCH * OUT);
+    report("matrix_multiply_fused     [mixed/pure]", compare_f32(R16,    Rp16_w, BATCH * OUT), BATCH * OUT);
 
     // NT (d_input shape): C[BATCH x IN] = dout[BATCH x OUT] . W[IN x OUT]^T
     memset(R16, 0, sizeof(float) * BATCH * IN);
     memset(R32, 0, sizeof(float) * BATCH * IN);
+    memset(Rp16, 0, sizeof(Rp16));
     matrix_multiply_nt(dout_f16, W_f16, R16, BATCH, OUT, IN);
     matrix_multiply_nt_32(dout_f32, W_f32, R32, BATCH, OUT, IN);
-    report("matrix_multiply_nt", compare_f32(R16, R32, BATCH * IN), BATCH * IN);
+    matrix_multiply_nt_16(dout_f16, W_f16, Rp16, BATCH, OUT, IN);
+    widen_f16_to_f32(Rp16, Rp16_w, BATCH * IN);
+    report("matrix_multiply_nt     [mixed/fp32]", compare_f32(R16,    R32,    BATCH * IN), BATCH * IN);
+    report("matrix_multiply_nt_16  [pure/fp32] ", compare_f32(Rp16_w, R32,    BATCH * IN), BATCH * IN);
+    report("matrix_multiply_nt     [mixed/pure]", compare_f32(R16,    Rp16_w, BATCH * IN), BATCH * IN);
 
     // NT deferred (same shape as NT)
     memset(R16, 0, sizeof(float) * BATCH * IN);
     memset(R32, 0, sizeof(float) * BATCH * IN);
+    memset(Rp16, 0, sizeof(Rp16));
     matrix_multiply_nt_deferred(dout_f16, W_f16, R16, BATCH, OUT, IN);
     matrix_multiply_nt_deferred_32(dout_f32, W_f32, R32, BATCH, OUT, IN);
-    report("matrix_multiply_nt_deferred", compare_f32(R16, R32, BATCH * IN), BATCH * IN);
+    matrix_multiply_nt_deferred_16(dout_f16, W_f16, Rp16, BATCH, OUT, IN);
+    widen_f16_to_f32(Rp16, Rp16_w, BATCH * IN);
+    report("matrix_multiply_nt_deferred     [mixed/fp32]", compare_f32(R16,    R32,    BATCH * IN), BATCH * IN);
+    report("matrix_multiply_nt_deferred_16  [pure/fp32] ", compare_f32(Rp16_w, R32,    BATCH * IN), BATCH * IN);
+    report("matrix_multiply_nt_deferred     [mixed/pure]", compare_f32(R16,    Rp16_w, BATCH * IN), BATCH * IN);
 
     // TN (d_weights shape): C[IN x OUT] = A[BATCH x IN]^T . dout[BATCH x OUT]
     memset(R16, 0, sizeof(float) * IN * OUT);
     memset(R32, 0, sizeof(float) * IN * OUT);
+    memset(Rp16, 0, sizeof(Rp16));
     matrix_multiply_tn(A_f16, dout_f16, R16, BATCH, IN, OUT);
     matrix_multiply_tn_32(A_f32, dout_f32, R32, BATCH, IN, OUT);
-    report("matrix_multiply_tn", compare_f32(R16, R32, IN * OUT), IN * OUT);
+    matrix_multiply_tn_16(A_f16, dout_f16, Rp16, BATCH, IN, OUT);
+    widen_f16_to_f32(Rp16, Rp16_w, IN * OUT);
+    report("matrix_multiply_tn     [mixed/fp32]", compare_f32(R16,    R32,    IN * OUT), IN * OUT);
+    report("matrix_multiply_tn_16  [pure/fp32] ", compare_f32(Rp16_w, R32,    IN * OUT), IN * OUT);
+    report("matrix_multiply_tn     [mixed/pure]", compare_f32(R16,    Rp16_w, IN * OUT), IN * OUT);
 }
 
 static void test_forward(void)
@@ -437,7 +484,21 @@ static void test_forward(void)
     memset(out32, 0, sizeof(out32));
     fc_op_forward_32(&op32);
 
-    report("fc_op_forward.output", compare_f32(out16, out32, BATCH * OUT), BATCH * OUT);
+    // Pure FP16 forward: all-FP16 struct, _Float16 * output.
+    fc_op_p16 opp16;
+    memset(&opp16, 0, sizeof(opp16));
+    opp16.input    = A_f16;
+    opp16.weights  = W_f16;
+    opp16.bias     = bias_f16;
+    opp16.output   = outp16;
+    opp16.in_units = IN; opp16.out_units = OUT; opp16.batchsize = BATCH; opp16.layer_id = 1;
+    memset(outp16, 0, sizeof(outp16));
+    fc_op_forward_p16(&opp16);
+    widen_f16_to_f32(outp16, outp16_w, BATCH * OUT);
+
+    report("fc_op_forward  [mixed/fp32]", compare_f32(out16,    out32,    BATCH * OUT), BATCH * OUT);
+    report("fc_op_forward  [pure/fp32] ", compare_f32(outp16_w, out32,    BATCH * OUT), BATCH * OUT);
+    report("fc_op_forward  [mixed/pure]", compare_f32(out16,    outp16_w, BATCH * OUT), BATCH * OUT);
 }
 
 static void test_backward(void)
@@ -474,25 +535,32 @@ static void test_backward(void)
 static void test_loss(void)
 {
     printf_("\n--- PART 1d: loss functions (on each path's forward output) ---\n");
-    // out16 / out32 were produced in test_forward(); recompute defensively.
+    // out16 / out32 / outp16_w were produced in test_forward().
     static float grad16[BATCH * OUT];
     static float grad32[BATCH * OUT];
+    static float gradp16[BATCH * OUT];
     static float tgt[BATCH * OUT];
     for (int i = 0; i < BATCH * OUT; i++) tgt[i] = test_targets[i];
 
-    float mse16 = harness_mse_loss_vec(grad16, out16, tgt, OUT, BATCH);
-    float mse32 = harness_mse_loss_vec(grad32, out32, tgt, OUT, BATCH);
-    printf_("  MSE loss:  fp16-path=%.8f   fp32-path=%.8f   |diff|=%.8f\n",
-            (double)mse16, (double)mse32, (double)fabs((double)mse16 - (double)mse32));
-    report("mse.grad", compare_f32(grad16, grad32, BATCH * OUT), BATCH * OUT);
+    float mse16  = harness_mse_loss_vec(grad16,   out16,    tgt, OUT, BATCH);
+    float mse32  = harness_mse_loss_vec(grad32,   out32,    tgt, OUT, BATCH);
+    float msep16 = harness_mse_loss_vec(gradp16,  outp16_w, tgt, OUT, BATCH);
+    printf_("  MSE: mixed=%.8f  pure=%.8f  fp32=%.8f\n",
+            (double)mse16, (double)msep16, (double)mse32);
+    report("mse.grad  [mixed/fp32]", compare_f32(grad16,  grad32,   BATCH * OUT), BATCH * OUT);
+    report("mse.grad  [pure/fp32] ", compare_f32(gradp16, grad32,   BATCH * OUT), BATCH * OUT);
+    report("mse.grad  [mixed/pure]", compare_f32(grad16,  gradp16,  BATCH * OUT), BATCH * OUT);
 
     int lbl[BATCH];
     for (int i = 0; i < BATCH; i++) lbl[i] = test_labels[i];
-    float ce16 = harness_cross_entropy_loss(grad16, out16, lbl, OUT, BATCH);
-    float ce32 = harness_cross_entropy_loss(grad32, out32, lbl, OUT, BATCH);
-    printf_("  CE  loss:  fp16-path=%.8f   fp32-path=%.8f   |diff|=%.8f\n",
-            (double)ce16, (double)ce32, (double)fabs((double)ce16 - (double)ce32));
-    report("ce.grad", compare_f32(grad16, grad32, BATCH * OUT), BATCH * OUT);
+    float ce16  = harness_cross_entropy_loss(grad16,  out16,    lbl, OUT, BATCH);
+    float ce32  = harness_cross_entropy_loss(grad32,  out32,    lbl, OUT, BATCH);
+    float cep16 = harness_cross_entropy_loss(gradp16, outp16_w, lbl, OUT, BATCH);
+    printf_("  CE:  mixed=%.8f  pure=%.8f  fp32=%.8f\n",
+            (double)ce16, (double)cep16, (double)ce32);
+    report("ce.grad  [mixed/fp32]", compare_f32(grad16,  grad32,  BATCH * OUT), BATCH * OUT);
+    report("ce.grad  [pure/fp32] ", compare_f32(gradp16, grad32,  BATCH * OUT), BATCH * OUT);
+    report("ce.grad  [mixed/pure]", compare_f32(grad16,  gradp16, BATCH * OUT), BATCH * OUT);
 }
 
 static void test_optimizer(void)
@@ -586,7 +654,7 @@ static void test_flow(int steps)
 int main(void)
 {
     printf_("=====================================================================\n");
-    printf_(" FC-layer mixed-precision (FP16) vs FP32 equivalence test suite\n");
+    printf_(" FC-layer precision comparison: mixed FP16 | pure FP16 | FP32\n");
     printf_("   IN=%d  OUT=%d  BATCH=%d   REL_TOL=%.4f\n", IN, OUT, BATCH, (double)REL_TOL);
     printf_("=====================================================================\n");
 

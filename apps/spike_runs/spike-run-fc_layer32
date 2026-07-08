@@ -6,11 +6,8 @@ Network pointers use weights.c arrays directly (no parameter buffer copy).
   fc1: 1
 Total trainable layers: 1/13
 >>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
-pred[ 434 115 75 277 431 325 8 157 26 -1 -1 -1 ]  label[ 100 32 235 145 413 159 110 28 166 364 235 294 ]
+pred[ 447 319 438 185 124 407 380 148 195 99 65 158 ]  label[ 506 18 123 347 84 291 138 509 232 245 361 220 ]
 batch accuracy:  0.0000  (0 / 12 correct)
-[WARNING] Invalid data! Pred: -1, Label: 364
-[WARNING] Invalid data! Pred: -1, Label: 235
-[WARNING] Invalid data! Pred: -1, Label: 294
-batch macro F1:  0.0000  (over 18 classes)
-cycles[epoch 1 batch 1/1]: prep=160111, forward=1465540, pred+metric=1699300, loss=916, zero_d_input=1869, backward_d_input=1458416, backward_d_bias=354, backward_d_weights=411869, backward_total=1870710, update=188671, backward_wrapper=2140258
-epoch 1 step 1/1 loss: 2147483647.000000
+batch macro F1:  0.0000  (over 24 classes)
+cycles[epoch 1 batch 1/1]: prep=160177, forward=1465540, pred+metric=1054234, loss=916, zero_d_input=1869, backward_d_input=1458416, backward_d_bias=354, backward_d_weights=411869, backward_total=1870710, update=188671, backward_wrapper=2140258
+epoch 1 step 1/1 loss: 1.631078

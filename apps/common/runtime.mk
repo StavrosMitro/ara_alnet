@@ -75,6 +75,7 @@ spike_env_dir ?= $(ARA_DIR)/apps/riscv-tests
 SPIKE_INC     ?= -I$(spike_env_dir)/env -I$(spike_env_dir)/benchmarks/common
 SPIKE_CCFLAGS ?= -DPREALLOCATE=1 -DSPIKE=1 $(SPIKE_INC)
 SPIKE_LDFLAGS ?= -nostdlib -T$(spike_env_dir)/benchmarks/common/test.ld
+FPGA_CCFLAGS  ?= -DFPGA=1
 RISCV_SIM     ?= $(ISA_SIM_INSTALL_DIR)/bin/spike
 RISCV_SIM_MOD ?= $(ISA_SIM_MOD_INSTALL_DIR)/bin/spike
 # VLEN should be lower or equal than 4096 because of spike restrictions
@@ -100,7 +101,8 @@ DEFINES += $(ENV_DEFINES) $(MAKE_DEFINES)
 RISCV_WARNINGS += -Wunused-variable -Wall -Wextra -Wno-unused-command-line-argument # -Werror
 
 # LLVM Flags
-LLVM_FLAGS     ?= -march=rv64gcv_zfh_zvfh -mabi=$(RISCV_ABI) -mno-relax -fuse-ld=lld
+LLVM_SYSROOT   ?= $(LLVM_INSTALL_DIR)/riscv64-unknown-elf
+LLVM_FLAGS     ?= -march=rv64gcv_zfh_zvfh -mabi=$(RISCV_ABI) -mno-relax -fuse-ld=lld --sysroot=$(LLVM_SYSROOT)
 AUTOVECTORIZE  ?= 0
 LLVM_V_FLAGS   ?= $(if $(filter 1,$(AUTOVECTORIZE)),-mllvm -riscv-v-vector-bits-min=0 -mno-implicit-float,-fno-vectorize -mllvm -scalable-vectorization=off -mllvm -riscv-v-vector-bits-min=0 -mno-implicit-float)
 RISCV_FLAGS    ?= $(LLVM_FLAGS) $(LLVM_V_FLAGS) -mcmodel=medany -I$(CURDIR)/common -O3 -g -ffast-math -fno-common -fno-builtin-printf $(DEFINES) $(RISCV_WARNINGS)
@@ -113,8 +115,10 @@ RISCV_CCFLAGS  ?= $(RISCV_FLAGS) -ffunction-sections -fdata-sections -std=gnu99
 RISCV_LDFLAGS  ?= -static -nostartfiles -lm -Wl,--gc-sections -T$(CURDIR)/common/link.ld
 endif
 RISCV_CCFLAGS_SPIKE  ?= $(RISCV_FLAGS) $(SPIKE_CCFLAGS) -ffunction-sections -fdata-sections -std=gnu99
+RISCV_CCFLAGS_FPGA   ?= $(RISCV_FLAGS) $(FPGA_CCFLAGS) -ffunction-sections -fdata-sections -std=gnu99
 RISCV_CXXFLAGS ?= $(RISCV_FLAGS) -ffunction-sections -fdata-sections
 RISCV_LDFLAGS_SPIKE  ?= -static -nostartfiles -lm $(SPIKE_LDFLAGS) -Wl,--gc-sections
+RISCV_LDFLAGS_FPGA   ?= -static -nostartfiles -lm -Wl,--gc-sections -T$(CURDIR)/common/link.fpga.ld
 
 # GCC Flags
 RISCV_FLAGS_GCC    ?= -mcmodel=medany -march=$(RISCV_ARCH) -mabi=$(RISCV_ABI) -I$(CURDIR)/common -static -O3 -ffast-math -fno-common -fno-builtin-printf $(DEFINES) $(RISCV_WARNINGS)
@@ -138,6 +142,7 @@ else
 RUNTIME_LLVM  ?= common/crt0-llvm.S.o common/printf-llvm.c.o common/string-llvm.c.o common/serial-llvm.c.o common/util-llvm.c.o
 endif
 RUNTIME_SPIKE ?= $(spike_env_dir)/benchmarks/common/crt.S.o.spike $(spike_env_dir)/benchmarks/common/syscalls.c.o.spike common/util.c.o.spike common/printf.c.o.spike common/serial.c.o.spike
+RUNTIME_FPGA  ?= common/crt0.S.o.fpga common/printf.c.o.fpga common/string.c.o.fpga common/serial.c.o.fpga common/util.c.o.fpga
 .INTERMEDIATE: $(RUNTIME_GCC) $(RUNTIME_LLVM)
 
 %-gcc.S.o: %.S
@@ -163,6 +168,12 @@ RUNTIME_SPIKE ?= $(spike_env_dir)/benchmarks/common/crt.S.o.spike $(spike_env_di
 
 %.c.o.spike: %.c
 	$(RISCV_CC) $(RISCV_CCFLAGS_SPIKE) -c $< -o $@
+
+%.S.o.fpga: %.S
+	$(RISCV_CC) $(RISCV_CCFLAGS_FPGA) -c $< -o $@
+
+%.c.o.fpga: %.c
+	$(RISCV_CC) $(RISCV_CCFLAGS_FPGA) -c $< -o $@
 
 %.cpp.o: %.cpp
 	$(RISCV_CXX) $(RISCV_CXXFLAGS) -c $< -o $@

@@ -32,6 +32,11 @@
 #include "printf.h"
 #endif
 
+// DIAG (temporary): silence ALL printf so we can test whether everything EXCEPT
+// printing works. If fmatmul now runs to completion (kernel checkpoints advance,
+// EOC set), printf is conclusively the only problem. Revert by deleting this line.
+#define printf(...) ((void)0)
+
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
 extern uint64_t M;
@@ -45,6 +50,34 @@ extern double c[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
 extern double g[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
 
 #define THRESHOLD 0.001
+
+// Bring-up progress marker: a DIRECT store to DDR (bypasses printf/_putchar).
+// ARM reads it at 0x50000070 to see how far main got when it hangs.
+//   0x100 main entered      0x200 header printfs done (=> printf works)
+//   0x3xx before kernel size xx     0x4xx kernel size xx done     0x500 cycles printed
+#define DBG(v) do { *(volatile unsigned int *)0x50000070UL = (unsigned int)(v); __sync_synchronize(); } while (0)
+
+// ARM-controlled checkpoint bisect. ARM writes the checkpoint number to 0x50000060.
+// We publish the most recent checkpoint at 0x50000064 and halt when it matches CTRL.
+#define CTRL    (*(volatile unsigned int *)0x50000060UL)
+#define CKPTREG (*(volatile unsigned int *)0x50000064UL)
+#define CYCTAB  ((volatile unsigned int *)0x50000090UL)
+static void llc_flush_halt(void) {
+    volatile unsigned int *llc = (volatile unsigned int *)0x03001000UL;
+    unsigned int ways = llc[0x28/4];
+    unsigned int mask = (ways >= 32) ? 0xFFFFFFFFu : ((1u << ways) - 1u);
+    llc[0x8/4] = mask; llc[0xc/4] = 0; llc[0x10/4] = 1;   // flush all ways -> DDR
+    while (llc[0x18/4] != mask) { }                        // wait writeback done
+    // UN-FLUSH (re-enable the ways) before halting, like test_vsuite does.
+    // Without this, the ways stay disabled and every SUBSEQUENT run silently
+    // executes in LLC-bypass mode -- a hidden state change between runs.
+    llc[0x8/4] = 0; llc[0xc/4] = 0; llc[0x10/4] = 1;
+    while (llc[0x18/4] != 0) { }
+    for (;;) { }                                           // halt
+}
+
+#define CKPT(n) do { CKPTREG = (unsigned int)(n); __sync_synchronize(); \
+           if (CTRL == (unsigned int)(n)) llc_flush_halt(); } while (0)
 
 // Verify the matrix
 int verify_matrix(double *result, double *gold, size_t R, size_t C,
@@ -61,12 +94,19 @@ int verify_matrix(double *result, double *gold, size_t R, size_t C,
 }
 
 int main() {
+  DBG(0x100);   // main entered (before any printf)
+  CKPT(1);      // reached main
   printf("\n");
   printf("=============\n");
   printf("=  FMATMUL  =\n");
   printf("=============\n");
   printf("\n");
   printf("\n");
+  DBG(0x200);   // header printfs done => printf works
+  CKPT(2);      // header printfs done
+
+  unsigned int ckpt_num = 3;   // 3=before first kernel, then 4=after kernel, 5=metrics printed, ...
+  int iter = 0;
 
 #ifdef VCD_DUMP
   // Measure only the full-size matmul
@@ -83,9 +123,13 @@ int main() {
 
     // Matrices are initialized --> Start calculating
     printf("Calculating fmatmul...\n");
+    DBG(0x300 + s);   // BEFORE kernel of size s (outside timed region)
+  CKPT(ckpt_num++);  // about to enter this kernel
     start_timer();
     fmatmul(c, a, b, s, s, s);
     stop_timer();
+    DBG(0x400 + s);   // AFTER kernel of size s completed (outside timed region)
+  CKPT(ckpt_num++);  // kernel of this size done
 
     // Metrics
     int64_t runtime = get_timer();
@@ -95,6 +139,13 @@ int main() {
     printf("The execution took %d cycles.\n", runtime);
     printf("The performance is %f FLOP/cycle (%f%% utilization).\n",
            performance, utilization);
+
+    // ARM-controlled bisection: log (size, cycles) and halt after size 'ctrl'.
+    CYCTAB[2 * iter]     = (unsigned int)s;
+    CYCTAB[2 * iter + 1] = (unsigned int)runtime;
+    __sync_synchronize();
+    iter++;
+    CKPT(ckpt_num++);  // metrics printed
 
     // Verify the result only for s == M (to keep it simple)
     if (s == M) {

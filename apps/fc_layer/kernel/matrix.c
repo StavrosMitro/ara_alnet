@@ -38,6 +38,8 @@ float shared_memory_pool[MATRIX_TRANSPOSE_WORKSPACE_ELEMS];
 
 // float fmatmul_a_scratch[FMATMUL_MAX_M * FMATMUL_MAX_N];
 float fmatmul_c_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
+// FP16 output scratch for the hidden-layer forward path (fmatmul_fused_f16out).
+_Float16 fmatmul_c_scratch_f16[FMATMUL_MAX_M * FMATMUL_MAX_K];
 static float fmatmul_nt_loop_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 static float fmatmul_nt_out_scratch[FMATMUL_MAX_M * FMATMUL_MAX_K];
 
@@ -310,6 +312,68 @@ void matrix_multiply_nt(const _Float16 *a, const _Float16 *b, float *c,
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
+    }
+}
+
+// FP16-output variant of matrix_multiply_nt: c = a * b^T with FP16 c (d_input).
+// Overwrite semantics (not accumulate): the caller pre-zeroes d_input and calls
+// this once, so overwrite == accumulate-from-zero. d_input carries the loss scale
+// into the previous layer's FP16 gradient chain (it is NOT unscaled here).
+void matrix_multiply_nt_f16out(const _Float16 *a, const _Float16 *b, _Float16 *c,
+                               const int M, const int N, const int K)
+{
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    _Float16 *fmatmul_a_scratch = (_Float16 *)shared_memory_pool;
+    unsigned long int block = fmatmul_row_block((unsigned long int)M);
+    unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
+
+    if (padded_m == (unsigned long int)M) {
+        // No row padding: narrow straight into c.
+        fmatmul_nt_f16out(c, a, b,
+                          (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
+    const size_t mn = (size_t)M * (size_t)N;
+    const size_t pnk = (size_t)padded_m * (size_t)N;
+    const size_t mk = (size_t)M * (size_t)K;
+
+    // Pack a into the padded FP16 scratch (rows [M, padded_m) zero-filled).
+    size_t remaining_mn = mn;
+    const _Float16 *src_mn = a;
+    _Float16 *dst_mn = fmatmul_a_scratch;
+    while (remaining_mn > 0) {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl; dst_mn += vl; remaining_mn -= vl;
+    }
+    size_t remaining = pnk - mn;
+    _Float16 *dstz = fmatmul_a_scratch + mn;
+    while (remaining > 0) {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.x v0, zero");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dstz) : "memory");
+        dstz += vl; remaining -= vl;
+    }
+
+    fmatmul_nt_f16out(fmatmul_c_scratch_f16, fmatmul_a_scratch, b,
+                      padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    // Copy the valid M*K FP16 rows into c.
+    size_t remaining_mk = mk;
+    const _Float16 *src_mk = fmatmul_c_scratch_f16;
+    _Float16 *dst_mk = c;
+    while (remaining_mk > 0) {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle16.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl; dst_mk += vl; remaining_mk -= vl;
     }
 }
 
