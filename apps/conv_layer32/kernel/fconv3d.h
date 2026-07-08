@@ -37,14 +37,6 @@ void fconv3d_warm(double *o, double *i, double *f, int64_t M, int64_t N,
 void fconv3d_CHx3x3_f32(float *o, const float *i, const float *f, int64_t M,
                         int64_t N, int64_t C, float bias);
 
-// Mixed-precision: FP16 input/weights → FP32 accumulator → FP32 output (used by backward d_input)
-void fconv3d_CHx3x3_f16(float *o, const _Float16 *i, const _Float16 *f, int64_t M,
-                        int64_t N, int64_t C, float bias);
-
-// Mixed-precision: FP16 input/weights → FP32 accumulator → FP16 output (used by forward)
-void fconv3d_CHx3x3_f16_f16out(_Float16 *o, const _Float16 *i, const _Float16 *f, int64_t M,
-                               int64_t N, int64_t C, float bias);
-
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // Threshold for FP numbers comparison during the final check

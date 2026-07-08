@@ -73,14 +73,10 @@ static inline int64_t alexnet_cycle_count_local(void)
 
 static float d_conv1_weights[CONV1_WEIGHT_ELEMS];
 static float d_conv1_bias[CONV1_OUT_CHANNELS];
-static float v_conv1_weights[CONV1_WEIGHT_ELEMS];   // FP32 momentum velocity — stays FP32
+static float v_conv1_weights[CONV1_WEIGHT_ELEMS];
 static float v_conv1_bias[CONV1_OUT_CHANNELS];
 
-// Mixed-precision FP16 working copies
-static _Float16 conv1_weights_f16[CONV1_WEIGHT_ELEMS];  // FP16 copy of FP32 master weights
-static _Float16 train_input_pad_f16_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_PADDED_IN_UNITS];
-
-static _Float16 d_conv1_output_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
+static float d_conv1_output_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
 static float d_conv1_input_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_IN_UNITS];
 static float d_conv1_input_pad_buf[ALEXNET_STATIC_MAX_BATCH * CONV1_PADDED_IN_UNITS];
 
@@ -302,64 +298,6 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
     return mse_loss_val;
 }
 
-static float mse_loss_f16_vec(_Float16 *delta_preds, const _Float16 *preds, const float *targets, int units, int batch_size)
-{
-    int total_elems = batch_size * units;
-    float scale_factor = 0.5f / (float)total_elems;
-
-    size_t max_vl;
-    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
-    asm volatile("vmv.v.i v8, 0");
-
-    int n = total_elems;
-    const _Float16 *p_ptr = preds;
-    const float *t_ptr = targets;
-    _Float16 *d_ptr = delta_preds;
-    float LOSS_SCALE = 1024.0f;
-    float grad_scale = LOSS_SCALE / (float)total_elems;
-    //adding loss scaling
-    while (n > 0) {
-        size_t vl;
-        // 1. Το μηχάνημα ρυθμίζεται για την ΠΗΓΗ (e16, m4)
-        asm volatile("vsetvli %0, %1, e16, m4, tu, ma" : "=r"(vl) : "r"(n));
-        asm volatile("vle16.v v0, (%0)" :: "r"(p_ptr));
-        
-        // 2. WIDENING: Διαβάζει e16(m4) και φτιάχνει ΑΥΤΟΜΑΤΑ e32(m8) στο v16!
-        asm volatile("vfwcvt.f.f.v v16, v0");
-        
-        // 3. ΤΩΡΑ ρυθμίζουμε το μηχάνημα σε e32, m8 για να κάνουμε τα μαθηματικά
-        asm volatile("vsetvli zero, zero, e32, m8, tu, ma");
-        asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
-        
-        // 4. Πράξεις σε FP32
-        asm volatile("vfsub.vv v16, v16, v24");
-        asm volatile("vfmacc.vv v8, v16, v16");
-        
-        // (Το grad_scale από το προηγούμενο μήνυμα για τη μαθηματική ορθότητα)
-        asm volatile("vfmul.vf v16, v16, %0" :: "f"(grad_scale));
-        
-        // 5. NARROWING: Ρυθμίζουμε το μηχάνημα για τον ΠΡΟΟΡΙΣΜΟ (e16, m4)
-        asm volatile("vsetvli zero, zero, e16, m4, tu, ma");
-        asm volatile("vfncvt.f.f.w v0, v16");
-        asm volatile("vse16.v v0, (%0)" :: "r"(d_ptr));
-
-        p_ptr += vl;
-        t_ptr += vl;
-        d_ptr += vl;
-        n -= (int)vl;
-    }
-
-    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");
-    asm volatile("vmv.v.i v0, 0");
-    asm volatile("vfredsum.vs v0, v8, v0");
-    float sum_squares;
-    asm volatile("vfmv.f.s %0, v0" : "=f"(sum_squares));
-
-    float mse_loss_val = sum_squares * scale_factor;
-    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
-    return mse_loss_val;
-}
-
 static inline void CLIP(float *x, float down, float up)
 {
     *x = MIN(up, MAX(down, *x));
@@ -420,17 +358,13 @@ static void gradient_descent(alexnet *net)
     if (!net->trainable.conv1)
         return;
 
-    net->conv1.weights   = conv1_weights;
-    net->conv1.bias      = conv1_bias;
+    net->conv1.weights = conv1_weights;
+    net->conv1.bias = conv1_bias;
     net->conv1.d_weights = d_conv1_weights;
-    net->conv1.d_bias    = d_conv1_bias;
+    net->conv1.d_bias = d_conv1_bias;
 
-    // Update FP32 master weights and FP32 bias (optimizer always in FP32)
     momentum_sgd_vec(conv1_weights, v_conv1_weights, d_conv1_weights, CONV1_WEIGHT_ELEMS);
-    momentum_sgd_vec(conv1_bias,    v_conv1_bias,    d_conv1_bias,    CONV1_OUT_CHANNELS);
-
-    // Sync FP16 working copy from updated FP32 master
-    convert_f32_to_f16_vec(conv1_weights, conv1_weights_f16, CONV1_WEIGHT_ELEMS);
+    momentum_sgd_vec(conv1_bias, v_conv1_bias, d_conv1_bias, CONV1_OUT_CHANNELS);
 }
 
 void calloc_alexnet_d_params(alexnet *net)
@@ -458,21 +392,20 @@ void backward_alexnet(alexnet *net, const int *batch_Y, const float *batch_targe
 
     calloc_alexnet_d_params(net);
 
-    _Float16 *curr_grad = d_conv1_output_buf;
+    float *curr_grad = d_conv1_output_buf;
     float *next_grad = d_conv1_input_pad_buf;
     float loss_val = 0.0f;
     int64_t t0 = 0;
 
     t0 = alexnet_cycle_count_local();
-    //here curr_grad is d_output
-    loss_val = mse_loss_f16_vec(curr_grad, net->conv1.output_f16, batch_targets, net->conv1.out_units, net->batchsize);
+    loss_val = mse_loss_vec(curr_grad, net->conv1.output, batch_targets, net->conv1.out_units, net->batchsize);
     last_loss_cycles = alexnet_cycle_count_local() - t0;
 
     net->conv1.d_input = next_grad;
     t0 = alexnet_cycle_count_local();
     zero_f32_vec(net->conv1.d_input, net->batchsize * net->conv1.in_units);
     last_zero_dinput_cycles = alexnet_cycle_count_local() - t0;
-    net->conv1.d_output_f16 = curr_grad;
+    net->conv1.d_output = curr_grad;
 
     t0 = alexnet_cycle_count_local();
     if (net->trainable.conv1) {
@@ -529,12 +462,6 @@ void alexnet_train(alexnet *net, int epochs)
     precompute_img2col_offsets_static(&(net->conv1));
     last_precompute_cycles = alexnet_cycle_count_local() - t_precompute;
     printf_("precomputation cycles: %ld\n", last_precompute_cycles);
-
-    // ================================================================
-    // MIXED PRECISION INIT: downcast FP32 master weights → FP16 working copy
-    // ================================================================
-    convert_f32_to_f16_vec(conv1_weights, conv1_weights_f16, CONV1_WEIGHT_ELEMS);
-    net->conv1.weights_f16 = conv1_weights_f16;
     printf_("DEBUG: After precomputation, total_gather_elements should be set\n");
 
     // ================================================================
@@ -580,15 +507,9 @@ void alexnet_train(alexnet *net, int epochs)
             
             // --- VECTORIZED PADDING ---
             pad_tensor_vectorized(train_input_pad_buf, train_input_buf,
-                                  net->batchsize, CONV1_IN_CHANNELS,
+                                  net->batchsize, CONV1_IN_CHANNELS, 
                                   CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
-
-            // --- DOWNCAST padded FP32 input → FP16 for mixed-precision forward ---
-            size_t padded_elements = (size_t)net->batchsize * CONV1_PADDED_IN_UNITS;
-            convert_f32_to_f16_vec(train_input_pad_buf, train_input_pad_f16_buf,
-                                   padded_elements);
-            net->input_f16 = train_input_pad_f16_buf;
-
+                                  
             prep_cycles = alexnet_cycle_count_local() - t0;
 
             t0 = alexnet_cycle_count_local();
@@ -647,8 +568,8 @@ void alexnet_test(alexnet *net)
              net->batchsize, CONV1_IN_CHANNELS, CONV1_IN_H, CONV1_IN_W, CONV1_PAD);
 
     forward_alexnet(net);
-    float loss = mse_loss_f16_vec(d_conv1_output_buf, net->conv1.output_f16, train_targets_buf,
-                                  net->conv1.out_units, net->batchsize);
+    float loss = mse_loss_vec(d_conv1_output_buf, net->conv1.output, train_targets_buf,
+                              net->conv1.out_units, net->batchsize);
     printf_("test loss: %.6f\n", loss);
 }
 

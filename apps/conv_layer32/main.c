@@ -42,7 +42,7 @@ static int metrics_totLabel[OUT_LAYER];
 static int metrics_TP[OUT_LAYER];
 
 
-static _Float16 act_conv1_f16[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
+static float act_conv1[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
 
 static void zero_f32(float *buf, int n)
 {
@@ -223,11 +223,11 @@ void forward_alexnet(alexnet *net)
 #ifdef SHOW_OP_TIME
     alexnet_timer_now(&start);
 #endif
-    net->conv1.output_f16 = act_conv1_f16;
-    net->conv1.input      = net->input;
-    net->conv1.input_f16  = net->input_f16;
+    net->conv1.output = act_conv1;
+    zero_f32(net->conv1.output, net->batchsize * net->conv1.out_units);
+    net->conv1.input = net->input;
     conv_op_forward(&(net->conv1));
-    net->output_f16 = net->conv1.output_f16;
+    net->output = net->conv1.output;
     ALEXNET_LOG_LAYER(" forward (&(net->conv1)) done\n");
 #ifdef SHOW_OP_TIME
     alexnet_timer_now(&finish);
@@ -245,18 +245,16 @@ void free_forward_activations(alexnet *net)
      * Must be called after each forward pass when NOT followed by backward_alexnet
      * (which already frees these buffers itself).
      */
-    net->conv1.output_f16 = NULL;
-    net->output_f16 = NULL;
+    net->conv1.output = NULL;
+
+    net->output = NULL;
 }
 
 
 void malloc_alexnet(alexnet *net)
 {
-    net->conv1.weights     = conv1_weights;
-    net->conv1.bias        = conv1_bias;
-    // weights_f16 is initialized in alexnet_train after the initial FP32 load
-    net->conv1.weights_f16 = NULL;
-    net->input_f16         = NULL;
+    net->conv1.weights = conv1_weights;
+    net->conv1.bias = conv1_bias;
 }
 
 void free_alexnet(alexnet *net)

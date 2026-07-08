@@ -25,6 +25,8 @@
 #define ALEXNET_STATIC_MAX_BATCH ALEXNET_BATCHSIZE
 #endif
 
+#include "fc_layer.h"
+
 #include "convolution_layer.h"
 
 #define SHOW_PREDCITION_DETAIL
@@ -118,10 +120,8 @@
 
 typedef struct network {
 
-    float    *input;
-    _Float16 *input_f16;   // FP16 downcast of padded input — set by caller before forward
-    float    *output;
-    _Float16 *output_f16;  // FP16 forward activations — set by conv_op_forward
+    float *input;
+    float *output;
     short batchsize;
     conv_op conv1;
 

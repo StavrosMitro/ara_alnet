@@ -36,17 +36,11 @@
 #define CONV5_INPUT_COL_SIZE (ALEXNET_STATIC_MAX_BATCH * CONV5_IKK * CONV5_OWOH)
 
 typedef struct conv_op {
-    float    *input;     float *d_input;
-    float    *output;    float *d_output;
-    float    *weights;   float *d_weights;   // FP32 master weights / weight gradients
-    float    *bias;      float *d_bias;      // bias always FP32
-    float    *input_col;
-
-    // Mixed-precision working copies (FP16)
-    _Float16 *weights_f16;   // FP16 copy of weights, kept in sync after each optimizer step
-    _Float16 *input_f16;     // FP16 downcast of padded input, set by caller before forward
-    _Float16 *output_f16;    // FP16 forward output (activations stored in FP16)
-    _Float16 *d_output_f16;  // FP16 output gradient, set by backward_alexnet before backward
+    float *input;   float *d_input;
+    float *output;  float *d_output;
+    float *weights; float *d_weights;
+    float *bias;    float *d_bias;
+    float *input_col;
 
     int in_channels, out_channels;
     int kernel_size; int padding; int stride;
@@ -82,9 +76,6 @@ void conv_op_backward_input_only(conv_op *op);
 
 // Precompute gather offsets for vectorized img2col
 void precompute_img2col_offsets_static(const conv_op *op);
-
-// Vectorized FP32 → FP16 narrowing conversion (e32,m8 load → vfncvt → e16,m4 store)
-void convert_f32_to_f16_vec(const float *src, _Float16 *dst, size_t n);
 
 // Verify scalar vs vectorized img2col implementations
 void verify_img2col_implementations(const conv_op *op, const float *test_input);

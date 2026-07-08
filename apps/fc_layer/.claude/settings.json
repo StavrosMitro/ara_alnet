@@ -10,11 +10,19 @@
       "Read(//tmp/**)",
       "Bash(python3 -c ' *)",
       "Bash(grep \"^bin$\")",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(rm /home/stavros/ara/apps/fc_layer/data.S.o.spike /home/stavros/ara/apps/fc_layer32/data.S.o.spike && echo \"deleted\")",
+      "Bash(make bin/fc_layer.spike bin/fc_layer32.spike)",
+      "Bash(make spike-run-fc_layer)",
+      "Bash(make spike-run-fc_layer32)",
+      "Bash(mount)",
+      "Read(//home/stavros/**)",
+      "Bash(grep -v \"^ara$\")"
     ],
     "additionalDirectories": [
       "/home/stavros/ara/apps/fc_layer_test",
-      "/home/stavros/ara/apps"
+      "/home/stavros/ara/apps",
+      "/home/stavros/ara/apps/fc_layer"
     ]
   }
 }

@@ -161,9 +161,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
         return;
     }
 
-    // =====================================================================
-    // 0. DOWNCAST: Μετατροπή του d_output (FP32) σε d_output_f16 (FP16)
-    // =====================================================================
+    // DOWNCAST
     int n_elems = op->batchsize * op->out_units;
     const float *src_grad = op->d_output;
     _Float16 *dst_grad = d_output_f16_buf;
@@ -174,7 +172,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
         asm volatile("vle32.v v24, (%0)" :: "r"(src_grad));
         
         asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(vl));
-        asm volatile("vfncvt.f.f.w v16, v24"); // Η ΠΡΑΓΜΑΤΙΚΗ μετατροπή σε FP16
+        asm volatile("vfncvt.f.f.w v16, v24");
         asm volatile("vse16.v v16, (%0)" :: "r"(dst_grad) : "memory");
         
         src_grad += vl;
@@ -182,9 +180,7 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
         n_elems -= vl;
     }
 
-    // =====================================================================
-    // 1. d_input calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
-    // =====================================================================
+    // d_input calculation
     t0 = fc_cycle_count_local();
     
     matrix_multiply_nt(d_output_f16_buf, op->weights, op->d_input,
@@ -193,9 +189,9 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     int64_t elapsed = fc_cycle_count_local() - t0;
     if (cycles) cycles->d_input_cycles += elapsed;
 
-    // =====================================================================
-    // 2. d_bias calculation: Χρησιμοποιεί το αυθεντικό FP32 op->d_output!
-    // =====================================================================
+
+    // d_bias calculation
+
     t0 = fc_cycle_count_local();
 
     calc_bias_gradient_vec(op->d_bias, op->d_output, op->out_units, op->batchsize);
@@ -203,9 +199,9 @@ void fc_op_backward_full_profile(fc_op *op, fc_backward_cycle_breakdown *cycles)
     elapsed = fc_cycle_count_local() - t0;
     if (cycles) cycles->d_bias_cycles += elapsed;
 
-    // =====================================================================
-    // 3. d_weights calculation: Χρησιμοποιούμε το d_output_f16_buf (FP16)
-    // =====================================================================
+    //
+    //  d_weights calculation
+    // 
     t0 = fc_cycle_count_local();
     register float *w_deltas = op->d_weights;
 
@@ -224,9 +220,9 @@ static inline void vector_scale_f32(float *vec, float scale, int length) {
 
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
         
-        asm volatile("vle32.v v8, (%0)" :: "r"(vec));        // Φόρτωση
-        asm volatile("vfmul.vf v8, v8, %0" :: "f"(scale));   // Πολλαπλασιασμός
-        asm volatile("vse32.v v8, (%0)" :: "r"(vec));        // Εγγραφή
+        asm volatile("vle32.v v8, (%0)" :: "r"(vec));       
+        asm volatile("vfmul.vf v8, v8, %0" :: "f"(scale));   
+        asm volatile("vse32.v v8, (%0)" :: "r"(vec));
 
         vec += vl;
         n -= vl;
