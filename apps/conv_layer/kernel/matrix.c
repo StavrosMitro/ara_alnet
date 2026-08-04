@@ -56,6 +56,100 @@ static inline unsigned long int fmatmul_row_block(unsigned long int m)
     return 4;
 }
 
+void matrix_multiply_f16(const _Float16 *a, const _Float16 *b, float *c,
+                         const int M, const int N, const int K)
+{
+    /**
+     * Mixed-precision matrix multiply, c = a * b
+     *
+     * Input:
+     * a    [M,N]   FP16
+     * b    [N,K]   FP16
+     * Output:
+     * c    [M,K]   FP32   (widening accumulate, feeds the FP32 master weights)
+     *
+     * Same row-padding contract as matrix_multiply(): fmatmul dispatches on M to
+     * a microkernel with a fixed row block (4/8/16), which reads and writes that
+     * many rows unconditionally. When M is not a multiple of the block, running
+     * fmatmul directly on the caller's buffers overruns both a and c. Pad M up
+     * into scratch instead, then copy back only the M real rows.
+     * */
+    if (M <= 0 || N <= 0 || K <= 0)
+        return;
+
+    _Float16 *fmatmul_a_f16_scratch = (_Float16 *)shared_memory_pool;
+    unsigned long int block = fmatmul_row_block((unsigned long int)M);
+    unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
+
+    // M already a multiple of the row block: no overrun, hand the caller's
+    // buffers straight to fmatmul.
+    if (padded_m == (unsigned long int)M) {
+        fmatmul(c, a, b,
+                (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        printf_("Error: matrix_multiply_f16 workspace overflow (M=%d N=%d K=%d)\n", M, N, K);
+        exit(1);
+    }
+
+    const size_t mn  = (size_t)M * (size_t)N;
+    const size_t pnk = (size_t)padded_m * (size_t)N;
+    const size_t mk  = (size_t)M * (size_t)K;
+
+    // Copy the M real rows of a into scratch (FP16).
+    size_t remaining_mn = mn;
+    const _Float16 *src_mn = a;
+    _Float16 *dst_mn = fmatmul_a_f16_scratch;
+    while (remaining_mn > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle16.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl;
+        dst_mn += vl;
+        remaining_mn -= vl;
+    }
+
+    // Zero-fill rows M..padded_m so the padded rows contribute nothing.
+    size_t remaining = pnk - mn;
+    _Float16 *dst = fmatmul_a_f16_scratch + mn;
+    while (remaining > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.i v0, 0");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst) : "memory");
+        dst += vl;
+        remaining -= vl;
+    }
+
+    // b is [N,K] and is not row-padded, so it is passed through untouched.
+    fmatmul(fmatmul_c_scratch, fmatmul_a_f16_scratch, b,
+            padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    // Overwrite c with the M real rows, discarding the padded rows. Same
+    // semantics as the fast path above and as matrix_multiply(): c = a*b.
+    size_t remaining_mk = mk;
+    const float *src_mk = fmatmul_c_scratch;
+    float *dst_mk = c;
+    while (remaining_mk > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
+        src_mk += vl;
+        dst_mk += vl;
+        remaining_mk -= vl;
+    }
+}
+
 
 void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K)
 {
@@ -125,6 +219,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     fmatmul(fmatmul_c_scratch, fmatmul_a_scratch, b,
             padded_m, (unsigned long int)N, (unsigned long int)K);
 
+    // Overwrite c with the M real rows (padded path == fast path: c = a*b).
     size_t remaining_mk = mk;
     const float *src_mk = fmatmul_c_scratch;
     float *dst_mk = c;
@@ -133,9 +228,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
         size_t vl = 0;
         asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
         asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
@@ -246,13 +339,13 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
-    // if ((unsigned long int)N > FMATMUL_MAX_N ||
-    //     (unsigned long int)K > FMATMUL_MAX_K ||
-    //     padded_m > FMATMUL_MAX_M)
-    // {
-    //     matrix_multiply_scalar_nt(a, b, c, M, N, K);
-    //     return;
-    // }
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        printf_("Error: matrix_multiply_nt workspace overflow (M=%d N=%d K=%d)\n", M, N, K);
+        exit(1);
+    }
 
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;

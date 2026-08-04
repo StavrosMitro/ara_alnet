@@ -87,8 +87,9 @@ static inline void alexnet_timer_now(alexnet_timer_t *tp)
 #endif
 #endif
 
-#define FC_INPUT_UNITS 2048
-#define FC_OUTPUT_UNITS 512
+// FC_INPUT_UNITS / FC_OUTPUT_UNITS come from alexnet.h (single source of truth).
+// They were re-#define'd here unconditionally, which overrode any -D from the
+// build system and pinned this app to 128 regardless of the Makefile knob.
 #ifndef FC_TOTAL_SAMPLES
 #define FC_TOTAL_SAMPLES 4
 #endif
@@ -454,7 +455,14 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
     // reduction
     
 
-    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");   // set vl = VLMAX
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) does NOT select VLMAX -- it
+    // KEEPS the current vl and only changes vtype. Here that vl is whatever the
+    // loop's LAST iteration used, i.e. the partial tail when total_elems is not
+    // a multiple of VLMAX. A reduction only reads vl elements of vs2, so every
+    // accumulator lane above that tail was silently dropped and the loss came
+    // out too small. rd != x0 with rs1 = x0 requests AVL = ~0 -> vl = VLMAX,
+    // which is what the accumulator was zeroed and filled at.
+    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
     asm volatile("vmv.v.i v0, 0");                         // zero entire v0..v7 group
     asm volatile("vfredsum.vs v0, v8, v0");               // sum all elements of v8..v15 into v0[0]
     float sum_squares;
@@ -718,7 +726,11 @@ void compute_batch_metrics_32(const int *preds, const int *labels, int batchsize
     for (int i = 0; i < batchsize; i++)
         if (preds[i] == labels[i]) correct++;
     float accuracy = (float)correct / batchsize;
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch accuracy:  %.4f  (%d / %d correct)\n", accuracy, correct, batchsize);
+#else
+    (void)accuracy;
+#endif
 
     int *true_pos = metrics_true_pos;
     int *false_pos = metrics_false_pos;
@@ -757,5 +769,9 @@ void compute_batch_metrics_32(const int *preds, const int *labels, int batchsize
         }
     }
     float macro_f1 = (class_count > 0) ? f1_sum / class_count : 0.0f;
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch macro F1:  %.4f  (over %d classes)\n", macro_f1, class_count);
+#else
+    (void)macro_f1;
+#endif
 }

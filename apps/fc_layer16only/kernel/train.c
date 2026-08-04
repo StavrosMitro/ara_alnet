@@ -63,6 +63,19 @@ static inline void alexnet_timer_now(alexnet_timer_t *tp)
 }
 #endif
 
+// Matched to fc_layer's LEARNING_RATE so the two apps differ only in precision.
+// (This was 0.001f while the SGD lived inside fc_op_backward.) Override from the
+// Makefile with -DLEARNING_RATE=... to explore the FP16 update-swamping threshold:
+// at lr=1e-5, lr*dw is ~1e-7 while FP16's relative epsilon is ~1e-3, so updates
+// round away against weights of magnitude ~1e-2 unless momentum accumulates them.
+#ifndef LEARNING_RATE
+#define LEARNING_RATE ((_Float16)0.00001f)
+#endif
+
+#ifndef ALEXNET_USE_MOMENTUM
+#define ALEXNET_USE_MOMENTUM 1
+#endif
+
 #ifndef ALEXNET_MAX_STEPS
 #define ALEXNET_MAX_STEPS 0
 #endif
@@ -81,8 +94,7 @@ static inline void alexnet_timer_now(alexnet_timer_t *tp)
 #endif
 #endif
 
-#define FC_INPUT_UNITS  2048
-#define FC_OUTPUT_UNITS 512
+// FC_INPUT_UNITS / FC_OUTPUT_UNITS come from alexnet.h (single source of truth).
 #ifndef FC_TOTAL_SAMPLES
 #define FC_TOTAL_SAMPLES 4
 #endif
@@ -130,9 +142,14 @@ static int metrics_true_pos[FC_OUTPUT_UNITS];
 static int metrics_false_pos[FC_OUTPUT_UNITS];
 static int metrics_false_neg[FC_OUTPUT_UNITS];
 
+static _Float16 v_fc1_weights[FC_INPUT_UNITS * FC_OUTPUT_UNITS];
+static _Float16 v_fc1_bias[FC_OUTPUT_UNITS];
+
 static int64_t last_loss_cycles              = 0;
 static int64_t last_zero_dinput_cycles       = 0;
 static int64_t last_fc_backward_total_cycles = 0;
+static int64_t last_update_cycles            = 0;
+static int     last_step_skipped             = 0;
 static fc_backward_cycle_breakdown last_fc_backward_breakdown = {0, 0, 0};
 
 static void zero_f16(_Float16 *buf, int n)
@@ -185,27 +202,34 @@ static uint64_t checksum_i32(const int *arr, size_t n)
 }
 
 
+// All softmax state (max, esum, the per-class probability) is held in FP16, so
+// the gradient carries genuine FP16 error. expf/logf are still evaluated in FP32
+// because there is no FP16 transcendental — there is no way around that — but
+// every value that enters or leaves them is rounded to FP16, so nothing in the
+// gradient path retains FP32 precision.
 static float cross_entropy_loss_16(_Float16 *delta_preds, const _Float16 *preds,
                                     const int *labels, int units, int BATCH_SIZE)
 {
     float ce_loss = 0;
     for (int p = 0; p < BATCH_SIZE; p++)
     {
-        register float max_val = (float)preds[p * units];
+        register _Float16 max_val = preds[p * units];
         for (int i = 1; i < units; i++)
-            if ((float)preds[i + p*units] > max_val)
-                max_val = (float)preds[i + p*units];
+            if (preds[i + p*units] > max_val)
+                max_val = preds[i + p*units];
 
-        register float esum = 0;
+        register _Float16 esum = (_Float16)0.0f;
         for (int i = 0; i < units; i++)
-            esum += expf((float)preds[i + p*units] - max_val);
+            esum += (_Float16)expf((float)(preds[i + p*units] - max_val));
 
-        ce_loss += -logf(expf((float)preds[labels[p] + p*units] - max_val) / esum);
+        _Float16 p_label = (_Float16)expf((float)(preds[labels[p] + p*units] - max_val)) / esum;
+        ce_loss += -logf((float)p_label);
 
         for (int i = 0; i < units; i++)
         {
-            float softmax_i = expf((float)preds[i + p*units] - max_val) / esum;
-            delta_preds[p * units + i] = (_Float16)(softmax_i - (labels[p] == i ? 1.0f : 0.0f));
+            _Float16 softmax_i = (_Float16)expf((float)(preds[i + p*units] - max_val)) / esum;
+            delta_preds[p * units + i] =
+                softmax_i - (_Float16)(labels[p] == i ? 1.0f : 0.0f);
         }
     }
     ce_loss /= BATCH_SIZE;
@@ -214,25 +238,27 @@ static float cross_entropy_loss_16(_Float16 *delta_preds, const _Float16 *preds,
 }
 
 
+// Scalar reference MSE. Accumulates in FP16 to match mse_loss_vec_16, so the two
+// agree; only the returned loss scalar is widened, for printf.
 static float mse_loss_16(_Float16 *delta_preds, const _Float16 *preds,
                           const _Float16 *targets, int units, int BATCH_SIZE)
 {
-    float mse_loss_val = 0;
+    _Float16 mse_loss_val = (_Float16)0.0f;
 
     for (int p = 0; p < BATCH_SIZE; p++)
     {
         for (int i = 0; i < units; i++)
         {
-            int   idx  = p * units + i;
-            float diff = (float)preds[idx] - (float)targets[idx];
-            delta_preds[idx] = (_Float16)diff;
-            mse_loss_val += 0.5f * diff * diff;
+            int      idx  = p * units + i;
+            _Float16 diff = preds[idx] - targets[idx];
+            delta_preds[idx] = diff;
+            mse_loss_val += (_Float16)0.5f * diff * diff;
         }
     }
 
-    mse_loss_val /= (BATCH_SIZE * units);
-    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
-    return mse_loss_val;
+    mse_loss_val /= (_Float16)(BATCH_SIZE * units);
+    ALEXNET_LOG_LAYER("MSE loss computed: %f\n", (float)mse_loss_val);
+    return (float)mse_loss_val;
 }
 
 static float mse_loss_vec_16(_Float16 *delta_preds, const _Float16 *preds,
@@ -267,7 +293,13 @@ static float mse_loss_vec_16(_Float16 *delta_preds, const _Float16 *preds,
         n     -= vl;
     }
 
-    asm volatile("vsetvli zero, zero, e16, m8, tu, ma");
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the current vl and only
+    // changes vtype -- it does NOT select VLMAX. That vl is the loop's last
+    // (possibly partial) chunk, and a reduction reads only vl elements of vs2,
+    // so accumulator lanes above the tail were silently dropped and the loss
+    // came out too small. rd != x0 with rs1 = x0 gives AVL = ~0 -> vl = VLMAX,
+    // matching how v8 was zeroed and accumulated above.
+    asm volatile("vsetvli %0, zero, e16, m8, tu, ma" : "=r"(max_vl));
     asm volatile("vmv.v.i v0, 0");
     asm volatile("vfredsum.vs v0, v8, v0");
 
@@ -281,6 +313,66 @@ static float mse_loss_vec_16(_Float16 *delta_preds, const _Float16 *preds,
 
     ALEXNET_LOG_LAYER("MSE loss computed: %f\n", mse_loss_val);
     return mse_loss_val;
+}
+
+
+/* ---- Vector SGD, pure FP16 ----
+ *
+ * Structural mirror of fc_layer's momentum_sgd_vec_f32, but with FP16 weights,
+ * velocity and gradients — there is no FP32 master copy to fall back on, so the
+ * velocity is what carries a small lr*dw across steps until it is large enough
+ * to survive the add into w. Gradients arrive already unscaled by fc_op_backward.
+ */
+static void momentum_sgd_vec_16(_Float16 *w, _Float16 *v_w, const _Float16 *d_w, int units)
+{
+    _Float16 lr = LEARNING_RATE;
+    int n = units;
+
+#if ALEXNET_USE_MOMENTUM
+    _Float16 momentum = (_Float16)0.9f;
+    _Float16 clip_min = (_Float16)-1.0f;
+    _Float16 clip_max = (_Float16)1.0f;
+
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(n));
+
+        asm volatile("vle16.v v8,  (%0)" :: "r"(v_w));
+        asm volatile("vle16.v v16, (%0)" :: "r"(d_w));
+        asm volatile("vle16.v v24, (%0)" :: "r"(w));
+
+        asm volatile("vfmul.vf v8, v8, %0"    :: "f"(momentum));
+        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
+        asm volatile("vfmax.vf v8, v8, %0"    :: "f"(clip_min));
+        asm volatile("vfmin.vf v8, v8, %0"    :: "f"(clip_max));
+        asm volatile("vfadd.vv v24, v24, v8");
+        asm volatile("vse16.v v8,  (%0)" :: "r"(v_w) : "memory");
+        asm volatile("vse16.v v24, (%0)" :: "r"(w)   : "memory");
+
+        w += vl; v_w += vl; d_w += vl; n -= (int)vl;
+    }
+#else
+    (void)v_w;
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vle16.v v8,  (%0)" :: "r"(w));
+        asm volatile("vle16.v v16, (%0)" :: "r"(d_w));
+        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
+        asm volatile("vse16.v v8,  (%0)" :: "r"(w) : "memory");
+        w += vl; d_w += vl; n -= (int)vl;
+    }
+#endif
+}
+
+static void gradient_descent(alexnet *net)
+{
+    if (net->trainable.fc1) {
+        momentum_sgd_vec_16(net->fc1.weights, v_fc1_weights, net->fc1.d_weights,
+                            net->fc1.in_units * net->fc1.out_units);
+        momentum_sgd_vec_16(net->fc1.bias, v_fc1_bias, net->fc1.d_bias,
+                            net->fc1.out_units);
+    }
 }
 
 
@@ -331,10 +423,24 @@ void backward_alexnet_16(alexnet *net, const int *batch_Y,
     last_zero_dinput_cycles = alexnet_cycle_count_local() - t0;
     net->fc1.d_output = curr_grad;
 
+    last_update_cycles = 0;
+    last_step_skipped  = 0;
+
     if (net->trainable.fc1) {
         t0 = alexnet_cycle_count_local();
-        fc_op_backward(&(net->fc1), &last_fc_backward_breakdown);
+        int grads_ok = fc_op_backward(&(net->fc1), &last_fc_backward_breakdown);
         last_fc_backward_total_cycles = alexnet_cycle_count_local() - t0;
+
+        // grads_ok == 0 means an FP16 overflow was detected in the backward
+        // matmuls: the gradients are garbage and the loss scale has been halved.
+        // Skip the optimizer entirely rather than corrupting the weights.
+        if (grads_ok) {
+            t0 = alexnet_cycle_count_local();
+            gradient_descent(net);
+            last_update_cycles = alexnet_cycle_count_local() - t0;
+        } else {
+            last_step_skipped = 1;
+        }
     } else {
         fc_op_backward_input_only(&(net->fc1));
         last_fc_backward_breakdown.d_input_cycles   = 0;
@@ -427,7 +533,7 @@ void alexnet_train_16(alexnet *net, int epochs)
             backward_alexnet_16(net, batch_Y, mse_targets_buf, &step_loss);
             backward_wrapper_cycles = alexnet_cycle_count_local() - t0;
 
-            printf_("cycles[epoch %d batch %d/%d]: prep=%ld, forward=%ld, pred+metric=%ld, loss=%ld, zero_d_input=%ld, backward_d_input=%ld, backward_d_bias=%ld, backward_d_weights=%ld, backward_total=%ld, backward_wrapper=%ld\n",
+            printf_("cycles[epoch %d batch %d/%d]: prep=%ld, forward=%ld, pred+metric=%ld, loss=%ld, zero_d_input=%ld, backward_d_input=%ld, backward_d_bias=%ld, backward_d_weights=%ld, backward_total=%ld, update=%ld, backward_wrapper=%ld\n",
                     e + 1, b + 1, steps_per_epoch,
                     prep_cycles, forward_cycles, pred_metric_cycles,
                     last_loss_cycles, last_zero_dinput_cycles,
@@ -435,8 +541,10 @@ void alexnet_train_16(alexnet *net, int epochs)
                     last_fc_backward_breakdown.d_bias_cycles,
                     last_fc_backward_breakdown.d_weights_cycles,
                     last_fc_backward_total_cycles,
+                    last_update_cycles,
                     backward_wrapper_cycles);
-            printf_("epoch %d step %d/%d loss: %.6f\n", e + 1, b + 1, steps_per_epoch, step_loss);
+            printf_("epoch %d step %d/%d loss: %.6f%s\n", e + 1, b + 1, steps_per_epoch,
+                    step_loss, last_step_skipped ? "  [SKIPPED: fp16 grad overflow]" : "");
         }
         ALEXNET_LOG_LAYER("============================= epoch %d / %d end =============================\n", e+1, epochs);
     }
@@ -530,7 +638,16 @@ void compute_batch_metrics_16(const int *preds, const int *labels, int batchsize
     for (int i = 0; i < batchsize; i++)
         if (preds[i] == labels[i]) correct++;
     float accuracy = (float)correct / batchsize;
+    // Guarded, matching fc_layer32. Unconditional printf_ here made the
+    // pred+metric stage cost ~417K cycles against FP32's ~10K -- in Spike every
+    // character is a blocking HTIF syscall (~5000 cyc/char), so this measured
+    // console I/O, not compute. Build with -DSHOW_METRIC_EVALUTE (on BOTH apps)
+    // when you want the numbers.
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch accuracy:  %.4f  (%d / %d correct)\n", accuracy, correct, batchsize);
+#else
+    (void)accuracy;
+#endif
 
     int *true_pos  = metrics_true_pos;
     int *false_pos = metrics_false_pos;
@@ -569,5 +686,9 @@ void compute_batch_metrics_16(const int *preds, const int *labels, int batchsize
         }
     }
     float macro_f1 = (class_count > 0) ? f1_sum / class_count : 0.0f;
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch macro F1:  %.4f  (over %d classes)\n", macro_f1, class_count);
+#else
+    (void)macro_f1;
+#endif
 }

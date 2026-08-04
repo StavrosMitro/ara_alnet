@@ -1,0 +1,10 @@
+test to see if it compiled 14:36!
+batch size: 4 
+epochs: 1 
+batchsize in setup
+Network pointers use weights.c arrays directly (no parameter buffer copy).
+  fc1: 1
+Total trainable layers: 1/13
+>>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
+cycles[epoch 1 batch 1/1]: prep=7434, forward=3187, pred+metric=10580, loss=156, zero_d_input=64, backward_d_input=1968, backward_d_bias=90, backward_d_weights=5648, backward_total=7805, update=5033, backward_wrapper=16070
+epoch 1 step 1/1 loss: 0.541173

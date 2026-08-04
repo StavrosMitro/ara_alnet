@@ -8,6 +8,7 @@ import sys
 # CONFIGURATION
 # ==========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APPS_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "apps"))
 CONFIG_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "config"))
 TEMP_CONFIG_NAME = "autogen_test"
 TEMP_CONFIG_FILE = os.path.join(CONFIG_DIR, f"{TEMP_CONFIG_NAME}.mk")
@@ -219,6 +220,10 @@ def main():
                     os.remove(output_csv)
 
                 print(f"\n\n>>> 🚀 STARTING TEST [{sim_app}]: Lanes={lanes}, VLEN={vlen_bytes}B ({vlen_bits} bits) <<<")
+
+                # Build the app binary in apps/ before running the simulation.
+                # make simv does NOT build the binary — it only loads it.
+                run_command(f"make {sim_app}", cwd=APPS_DIR)
 
                 sim_cmd = f"make simv app={sim_app} config={TEMP_CONFIG_NAME}"
                 if USE_NOHUP:

@@ -99,7 +99,7 @@ module valu import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
     // we can handle.
     logic [idx_width(VInsnQueueDepth):0] issue_cnt;
     logic [idx_width(VInsnQueueDepth):0] commit_cnt;
-  } vinsn_queue_d, vinsn_queue_q;
+  } vinsn_queue_d, vinsn_queue_q; //q current, d next
 
   // Is the vector instruction queue full?
   logic vinsn_queue_full;

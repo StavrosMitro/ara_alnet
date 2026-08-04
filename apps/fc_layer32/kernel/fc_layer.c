@@ -88,6 +88,19 @@ void fc_op_forward_32(fc_op *op)
     const size_t pnk = (size_t)padded_m * (size_t)op->in_units;
     const size_t mk = (size_t)op->batchsize * (size_t)op->out_units;
 
+    if (padded_m == (unsigned long int)op->batchsize) {
+        // No padding needed: consume op->input and produce op->output directly.
+        // The staging below (copy input -> scratch, matmul -> c_scratch, copy
+        // c_scratch -> output) exists only to zero-pad the M dimension; with
+        // padded_m == batchsize it is pure overhead -- an extra mn-element and
+        // mk-element load+store pass that fc_layer16only's forward never paid,
+        // making the FP32 side of the benchmark look artificially slow.
+        fmatmul_fused_32(op->output, op->input, op->weights, op->bias,
+                         padded_m, (unsigned long int)op->in_units,
+                         (unsigned long int)op->out_units);
+        return;
+    }
+
     size_t remaining_mn = mn;
     const float *src_mn = op->input;
     float *dst_mn = fmatmul_a_scratch;

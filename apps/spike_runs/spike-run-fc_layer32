@@ -1,13 +1,10 @@
 test to see if it compiled 14:36!
-batch size: 12 
+batch size: 4 
 epochs: 1 
 batchsize in setup
 Network pointers use weights.c arrays directly (no parameter buffer copy).
   fc1: 1
 Total trainable layers: 1/13
 >>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
-pred[ 447 319 438 185 124 407 380 148 195 99 65 158 ]  label[ 506 18 123 347 84 291 138 509 232 245 361 220 ]
-batch accuracy:  0.0000  (0 / 12 correct)
-batch macro F1:  0.0000  (over 24 classes)
-cycles[epoch 1 batch 1/1]: prep=160177, forward=1465540, pred+metric=1054234, loss=916, zero_d_input=1869, backward_d_input=1458416, backward_d_bias=354, backward_d_weights=411869, backward_total=1870710, update=188671, backward_wrapper=2140258
-epoch 1 step 1/1 loss: 1.631078
+cycles[epoch 1 batch 1/1]: prep=17601, forward=9244, pred+metric=20048, loss=217, zero_d_input=121, backward_d_input=7389, backward_d_bias=90, backward_d_weights=13119, backward_total=20669, update=11985, backward_wrapper=38105
+epoch 1 step 1/1 loss: 0.661076

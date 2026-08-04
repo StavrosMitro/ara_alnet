@@ -73,6 +73,9 @@ void matrix_multiply_16(const _Float16 *a, const _Float16 *b, _Float16 *c,
         padded_m > FMATMUL_MAX_M)
     {
         printf_("[SCALAR] matrix_multiply_16: M=%d N=%d K=%d padded_m=%lu MAX_M=%d\n", M, N, K, padded_m, FMATMUL_MAX_M);
+        // matrix_multiply_scalar() accumulates (`*c_ptr += ...`), so zero c
+        // first to keep this path's contract identical to the vector paths.
+        memset(c, 0, (size_t)M * (size_t)K * sizeof(_Float16));
         matrix_multiply_scalar(a, b, c, M, N, K);
         return;
     }
@@ -123,10 +126,14 @@ void matrix_multiply_16(const _Float16 *a, const _Float16 *b, _Float16 *c,
     {
         size_t vl = 0;
         asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        // Plain copy-back: the result in fmatmul_c_scratch_16 IS the answer.
+        // This used to vle16 the old c and vfadd into it, ACCUMULATING --
+        // which disagreed with fmatmul_16() overwriting c on the unpadded
+        // path, and (for the _nt variant) with matrix_multiply_nt_32, whose
+        // equivalent already overwrites. Callers that did not pre-zero c
+        // silently summed every invocation onto the previous one.
         asm volatile("vle16.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle16.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse16.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
@@ -221,8 +228,15 @@ void matrix_multiply_nt_16(const _Float16 *a, const _Float16 *b, _Float16 *c,
     const size_t mk = (size_t)M * (size_t)K;
 
     if (padded_m == (unsigned long int)M) {
-        fmatmul_nt_16(fmatmul_c_scratch_16, a, b,
+        // No padding: write straight into c and skip the copy-back entirely.
+        // Routing through fmatmul_c_scratch_16 and then copying M*K elements
+        // back cost this app a load+store pass that matrix_multiply_nt_32
+        // (which already short-circuits here) never paid -- pure asymmetric
+        // memory traffic in the FP16 vs FP32 comparison, measurable as a
+        // SLOWER backward_d_input for FP16 despite the narrower elements.
+        fmatmul_nt_16(c, a, b,
                    (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
     } else {
         size_t remaining_mn = mn;
         const _Float16 *src_mn = a;
@@ -261,10 +275,14 @@ void matrix_multiply_nt_16(const _Float16 *a, const _Float16 *b, _Float16 *c,
     {
         size_t vl = 0;
         asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
+        // Plain copy-back: the result in fmatmul_c_scratch_16 IS the answer.
+        // This used to vle16 the old c and vfadd into it, ACCUMULATING --
+        // which disagreed with fmatmul_16() overwriting c on the unpadded
+        // path, and (for the _nt variant) with matrix_multiply_nt_32, whose
+        // equivalent already overwrites. Callers that did not pre-zero c
+        // silently summed every invocation onto the previous one.
         asm volatile("vle16.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle16.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse16.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse16.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
@@ -520,10 +538,10 @@ static void matrix_multiply_scalar_fused(const _Float16 *a, const _Float16 *b,
 {
     for (int i = 0; i < M; i++) {
         for (int p = 0; p < K; p++) {
-            float acc = (float)bias[p];
+            _Float16 acc = bias[p];
             for (int j = 0; j < N; j++)
-                acc += (float)a[i * N + j] * (float)b[j * K + p];
-            c[i * K + p] = (_Float16)acc;
+                acc += a[i * N + j] * b[j * K + p];
+            c[i * K + p] = acc;
         }
     }
 }

@@ -118,7 +118,10 @@ static void img2col_vectorized(const float *img, float *col)
 // =========================================================================
 // Precompute img2col offsets — called once before training
 // =========================================================================
-void precompute_img2col_offsets_static(const conv_op *op)
+// Returns the cycles spent in the actual offset generation only. The DEBUG
+// printf_ calls above the timer are excluded: in Spike each character is a
+// blocking HTIF syscall (~5000 cyc/char), which otherwise dwarfs the real work.
+int64_t precompute_img2col_offsets_static(const conv_op *op)
 {
     int iwih = op->in_w * op->in_h;
     int kk   = op->kernel_size * op->kernel_size;
@@ -137,6 +140,8 @@ void precompute_img2col_offsets_static(const conv_op *op)
                 total_gather_elements, MAX_GATHER_ELEMENTS);
         exit(1);
     }
+
+    int64_t _cyc0 = get_cycle_count();
 
     uint32_t patch_pattern[9];
     int p_idx = 0;
@@ -174,6 +179,8 @@ void precompute_img2col_offsets_static(const conv_op *op)
             src += vl; dst += vl; n -= (int)vl;
         }
     }
+
+    return get_cycle_count() - _cyc0;
 }
 
 // =========================================================================
@@ -292,29 +299,33 @@ static void pack_conv3x3_filter_f16(const conv_op *op, int oc, _Float16 *dst)
 // Restructure loop to [ky][kx][oc]: for each kernel position, the OC source
 // elements are contiguous (vle16), and the OC destination slots sit at
 // stride kk*2 bytes (vsse16).
+// Vectorized along the KERNEL axis (kk elements), not out_channels.
+//
+// dst[oc*kk + j] = weights_f16[(ic*kk + flip(j))*OC + oc], and for a square
+// kernel flip(j) = kk-1-j, so for a fixed oc the source walks BACKWARDS with
+// byte stride -OC*2 -- vlse16 handles that directly (RVV strides are signed).
+//
+// The previous form vectorized over out_channels, which runs at vl=1 when OC==1
+// (the common case here) and is slower than a scalar loop.
 static void pack_conv3x3_filter_rot180_dx_f16(const conv_op *op, int ic, _Float16 *dst)
 {
     int k  = op->kernel_size;
     int kk = k * k;
     int OC = op->out_channels;
-    int stride_bytes = kk * (int)sizeof(_Float16);
-    const _Float16 *w_base = op->weights_f16 + ic * kk * OC;
+    int stride_bytes = -OC * (int)sizeof(_Float16);   // negative: kernel backwards
 
-    for (int ky = 0; ky < k; ky++) {
-        for (int kx = 0; kx < k; kx++) {
-            int flip_idx = (k - 1 - ky) * k + (k - 1 - kx);
-            const _Float16 *src = w_base + flip_idx * OC;
-            _Float16 *d = dst + (ky * k + kx);
-            int n = OC;
-            while (n > 0) {
-                size_t vl;
-                asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
-                asm volatile("vle16.v v0, (%0)" :: "r"(src));
-                asm volatile("vsse16.v v0, (%0), %1" :: "r"(d), "r"(stride_bytes));
-                src += vl;
-                d   += (int)vl * kk;
-                n   -= (int)vl;
-            }
+    for (int oc = 0; oc < OC; oc++) {
+        const _Float16 *src = op->weights_f16 + (ic * kk + kk - 1) * OC + oc;
+        _Float16 *d = dst + oc * kk;
+        int n = kk;
+        while (n > 0) {
+            size_t vl;
+            asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(n));
+            asm volatile("vlse16.v v0, (%0), %1" :: "r"(src), "r"(stride_bytes));
+            asm volatile("vse16.v v0, (%0)" :: "r"(d));
+            src -= (int)vl * OC;
+            d   += vl;
+            n   -= (int)vl;
         }
     }
 }
@@ -548,10 +559,15 @@ void conv_op_forward(conv_op *op)
             exit(1);
         }
         op->input_col = conv5_input_col_full;
-        memset(op->input_col, 0,
+        // NOTE: element count, NOT bytes -- do not re-add * sizeof(float).
+        // The libc memset in common/string.c drops to a BYTE loop unless dest is
+        // 8-byte aligned. This buffer happens to be 8-byte aligned in this build,
+        // but conv_layer32's identical buffer is not, where the same memset cost
+        // 9249 cycles. vse32 needs only 4-byte alignment, so this has no cliff.
+        memset_vectorized_zero_f32(op->input_col,
                (size_t)op->batchsize *
                (size_t)(op->in_channels * op->kernel_size * op->kernel_size) *
-               (size_t)(op->out_w * op->out_h) * sizeof(float));
+               (size_t)(op->out_w * op->out_h));
     } else {
         op->input_col = NULL;
     }
@@ -590,16 +606,28 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
 
     for (int p = 0; p < op->batchsize; p++) {
         t0 = get_cycle_count();
-        img2col_vectorized_f16(op->input_f16 + p * op->in_units, x_col_f16_scratch);
+        // DISABLED (hang suspect + dead work). With the d_weights GEMM below
+        // commented out, nothing reads x_col_f16_scratch. It is also what HUNG
+        // the FP16 app on Ara RTL: vluxei32.v indexed gather at e16/m4 (index
+        // EEW=32 vs data EEW=16 => index EMUL=8). Spike never showed it.
+        // Re-enable together with the GEMM.
+        // img2col_vectorized_f16(op->input_f16 + p * op->in_units, x_col_f16_scratch);
         if (cycles) cycles->d_weights_im2col_cycles += get_cycle_count() - t0;
 
         memset_vectorized_zero_f32(t_d_weights, (size_t)oc * (size_t)ikk);
 
         t0 = get_cycle_count();
 
-        // Widening FMA matmul: FP16 × FP16 → FP32 accumulate
-        fmatmul(t_d_weights, op->d_output_f16 + p * oc * owoh, x_col_f16_scratch,
-                (unsigned long int)oc, (unsigned long int)owoh, (unsigned long int)ikk);
+        // DISABLED: benchmarking the conv kernel, not the weight-gradient GEMM.
+        // t_d_weights stays zeroed by the memset above, so the scatter below
+        // accumulates zeros and d_weights stays 0. Uncomment to restore.
+        //
+        // Widening FMA matmul: FP16 x FP16 -> FP32 accumulate.
+        // Goes through matrix_multiply_f16 rather than fmatmul directly: with
+        // oc < the microkernel row block (e.g. oc=1 -> fmatmul_4x4), a raw
+        // fmatmul reads/writes past the M=oc buffers. The wrapper row-pads M.
+        // matrix_multiply_f16(op->d_output_f16 + p * oc * owoh, x_col_f16_scratch,
+        //                     t_d_weights, oc, owoh, ikk);
 
         // Scatter-accumulate t_d_weights[oc,ikk] -> op->d_weights[ikk,oc]
         int stride_bytes = oc * (int)sizeof(float);

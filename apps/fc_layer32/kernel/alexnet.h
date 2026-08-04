@@ -3,6 +3,9 @@
 // Description: alexnet.h
 // Author:      Haris Wang
 //
+#ifndef ALEXNET_H
+#define ALEXNET_H
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +20,7 @@
 
 #include "fc_layer.h"
 
-#define SHOW_PREDCITION_DETAIL
+//#define SHOW_PREDCITION_DETAIL
 //#define SHOW_METRIC_EVALUTE
 //#define SHOW_OP_TIME
 
@@ -61,12 +64,32 @@
 #define FEATURE3_L 8
 #define FEATURE4_L 8
 #define FEATURE5_L 8
-#define POOLING5_L 4
+#define POOLING5_L 1
 
-#define FC6_LAYER   512
+#define FC6_LAYER   128
 #define FC7_LAYER   512
 // #define OUT_LAYER   1000 FOR IMAGENET
 #define OUT_LAYER   10 // FOR TINY IMAGENET
+
+// ===========================================================================
+// FC test-layer dimensions — SINGLE SOURCE OF TRUTH. Change these to resize the
+// layer; the op descriptor (main.c), the training buffers and data strides
+// (train.c) and the weight-shape check all derive from them.
+// NOTE: the input data / weights.c are generated separately — after changing
+// these you MUST re-run scripts/generate_fc_test_vectors.py with matching
+// INPUTS/OUTPUTS, or the embedded .bin strides won't line up. The apps/Makefile
+// does this for you (FC_BENCH_IN_UNITS / FC_BENCH_OUT_UNITS drive both the -D
+// flags and the generator).
+// Constraints: FC_INPUT_UNITS <= FC_MAX_IN_UNITS, FC_OUTPUT_UNITS <= FC_MAX_INTERNAL.
+// Mirrors fc_layer16only/kernel/alexnet.h so the FP32/FP16 pair resizes together;
+// these were hardcoded to 128 here, so the app silently ignored the Makefile knob.
+// ===========================================================================
+#ifndef FC_INPUT_UNITS
+#define FC_INPUT_UNITS  128
+#endif
+#ifndef FC_OUTPUT_UNITS
+#define FC_OUTPUT_UNITS 128
+#endif
 
 #define DROPOUT_PROB  0.0
 
@@ -116,3 +139,5 @@ void alexnet_train_32(alexnet *net, int epochs);
 void alexnet_test_32(alexnet *net);
 void alexnet_inference_32(alexnet *net, const unsigned char *img_bytes);
 void compute_batch_metrics_32(const int *preds, const int *labels, int batchsize);
+
+#endif // ALEXNET_H

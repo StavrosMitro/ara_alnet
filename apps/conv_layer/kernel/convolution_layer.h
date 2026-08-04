@@ -80,8 +80,9 @@ void conv_op_backward_full(conv_op *op);
 void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *cycles);
 void conv_op_backward_input_only(conv_op *op);
 
-// Precompute gather offsets for vectorized img2col
-void precompute_img2col_offsets_static(const conv_op *op);
+// Precompute gather offsets for vectorized img2col.
+// Returns compute-only cycles (excludes its internal DEBUG printf_ calls).
+int64_t precompute_img2col_offsets_static(const conv_op *op);
 
 // Vectorized FP32 → FP16 narrowing conversion (e32,m8 load → vfncvt → e16,m4 store)
 void convert_f32_to_f16_vec(const float *src, _Float16 *dst, size_t n);

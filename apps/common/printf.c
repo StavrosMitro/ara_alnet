@@ -39,7 +39,15 @@
 // so the ARM can see exactly how far a printf call got before hanging.
 //   0x84=1 printf_ entered   0x88=2 before _vsnprintf   0x8C=3 _vsnprintf entered
 //   0x90=4 before out()      0x94=5 _out_char entered    (0x74=0xAA _putchar entered)
+// FPGA-only: these addresses are raw DDR physical addresses valid on Cheshire
+// hardware. On SPIKE (and any other target) they're unmapped, so the store
+// traps and kills the run before anything reaches the console -- hence TRACE
+// must be a no-op unless FPGA=1.
+#ifdef FPGA
 #define TRACE(addr, val) do { *(volatile unsigned int *)(addr) = (unsigned int)(val); __sync_synchronize(); } while (0)
+#else
+#define TRACE(addr, val) do {} while (0)
+#endif
 
 // define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H ...) to include the
 // printf_config.h header file

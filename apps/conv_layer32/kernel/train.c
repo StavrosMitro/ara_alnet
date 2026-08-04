@@ -34,6 +34,12 @@ static inline int64_t alexnet_cycle_count_local(void)
 
 #define LEARNING_RATE 0.00001f
 
+// Mixed-precision loss scaling: the gradient seed is multiplied by LOSS_SCALE in
+// the loss function to keep FP16 gradients out of the subnormal range, then
+// unscaled by the same factor in the weight update. Must be identical here and
+// in conv_layer/kernel/train.c for the two flows to match.
+#define LOSS_SCALE 1024.0f
+
 #ifndef ALEXNET_USE_MOMENTUM
 #if defined(SPIKE)
 #define ALEXNET_USE_MOMENTUM 0
@@ -144,8 +150,14 @@ static void pad_tensor_vectorized(float *dst, const float *src, int batch, int c
     float *dst_zero = dst;
     
     // Βάζουμε 0 σε όλους τους lanes του τεράστιου καταχωρητή v8 (m8)
-    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
-    asm volatile("vmv.v.i v8, 0"); 
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the caller's vl and only
+    // changes vtype -- it does NOT select VLMAX. The splat then fills just those
+    // lanes while the drain loop below stores at vl = min(n, VLMAX), writing the
+    // untouched lanes out as GARBAGE instead of zeros. rd != x0 with rs1 = x0
+    // requests AVL = ~0 -> vl = VLMAX, so the whole register group is zeroed.
+    size_t vlmax_p;
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_p));
+    asm volatile("vmv.v.i v8, 0");
 
     while (n_zero > 0) {
         size_t vl;
@@ -270,6 +282,9 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
     const float *p_ptr = preds;
     const float *t_ptr = targets;
     float *d_ptr = delta_preds;
+    // Gradient seed scaled by LOSS_SCALE (unscaled again in momentum_sgd_vec).
+    // Loss value below is accumulated from the UNSCALED delta, so it stays true.
+    float grad_scale = LOSS_SCALE / (float)total_elems;
 
     while (n > 0) {
         size_t vl;
@@ -278,8 +293,9 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
         asm volatile("vle32.v v24, (%0)" :: "r"(t_ptr));
 
         asm volatile("vfsub.vv v16, v16, v24");
-        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
         asm volatile("vfmacc.vv v8, v16, v16");
+        asm volatile("vfmul.vf v16, v16, %0" :: "f"(grad_scale));
+        asm volatile("vse32.v v16, (%0)" :: "r"(d_ptr));
 
         p_ptr += vl;
         t_ptr += vl;
@@ -287,7 +303,13 @@ static float mse_loss_vec(float *delta_preds, const float *preds, const float *t
         n -= vl;
     }
 
-    asm volatile("vsetvli zero, zero, e32, m8, tu, ma");
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the current vl and only
+    // changes vtype -- it does NOT select VLMAX. That vl is the loop's last
+    // (possibly partial) chunk, and a reduction reads only vl elements of vs2,
+    // so accumulator lanes above the tail were silently dropped and the loss
+    // came out too small. rd != x0 with rs1 = x0 gives AVL = ~0 -> vl = VLMAX,
+    // matching how v8 was zeroed and accumulated above.
+    asm volatile("vsetvli %0, zero, e32, m8, tu, ma" : "=r"(max_vl));
     asm volatile("vmv.v.i v0, 0");
     asm volatile("vfredsum.vs v0, v8, v0");
     float sum_squares;
@@ -306,6 +328,9 @@ static inline void CLIP(float *x, float down, float up)
 static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 {
     float lr = LEARNING_RATE;
+    // Unscale the loss-scaled gradient before it is used, so clipping/momentum
+    // act on the true gradient. Pairs with grad_scale in the loss function.
+    float inv_loss_scale = 1.0f / LOSS_SCALE;
     int n = units;
 
 #if ALEXNET_USE_MOMENTUM
@@ -321,6 +346,7 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
         asm volatile("vle32.v v24, (%0)" :: "r"(w));
 
+        asm volatile("vfmul.vf v16, v16, %0" :: "f"(inv_loss_scale));
         asm volatile("vfmul.vf v8, v8, %0" :: "f"(momentum));
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
         asm volatile("vfmax.vf v8, v8, %0" :: "f"(clip_min));
@@ -343,6 +369,7 @@ static void momentum_sgd_vec(float *w, float *v_w, const float *d_w, int units)
 
         asm volatile("vle32.v v8,  (%0)" :: "r"(w));
         asm volatile("vle32.v v16, (%0)" :: "r"(d_w));
+        asm volatile("vfmul.vf v16, v16, %0" :: "f"(inv_loss_scale));
         asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(lr));
         asm volatile("vse32.v v8,  (%0)" :: "r"(w));
 
@@ -458,9 +485,9 @@ void alexnet_train(alexnet *net, int epochs)
     // ================================================================
     // PRECOMPUTE gather offsets for vectorized img2col (ONE TIME ONLY)
     // ================================================================
-    int64_t t_precompute = alexnet_cycle_count_local();
-    precompute_img2col_offsets_static(&(net->conv1));
-    last_precompute_cycles = alexnet_cycle_count_local() - t_precompute;
+    // Function returns compute-only cycles; timing it from here would instead
+    // measure its internal DEBUG printf_ calls (HTIF-bound, ~5000 cyc/char).
+    last_precompute_cycles = precompute_img2col_offsets_static(&(net->conv1));
     printf_("precomputation cycles: %ld\n", last_precompute_cycles);
     printf_("DEBUG: After precomputation, total_gather_elements should be set\n");
 

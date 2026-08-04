@@ -17,9 +17,15 @@
 // Bias          : FP32  (float)
 //
 // LMUL strategy:
-//   e16, m1  — source SEW/LMUL for loads and slides
-//   e32, m2  — destination SEW/LMUL for the widening accumulator v20
-//   VLMAX(e16,m1) == VLMAX(e32,m2), so vl is valid for both configs.
+//   vtype is e16,m1 throughout the row loop. v20-v21 is an implicit e32,m2
+//   group: vfwmacc derives it, vse32.v derives EMUL=2 from its own EEW, and
+//   vmv2r.v is vtype-independent. The bias lives in v22-v23.
+//
+//   This matters because Ara's dispatcher enters WAIT_IDLE — a full backend
+//   drain — on any vtype write that *decreases* LMUL. Configuring e32,m2 per
+//   row and dropping back to e16,m1 therefore cost one drain per output row,
+//   serializing consecutive rows. Hoisting the bias splat out of the row loop
+//   leaves exactly one such transition per call.
 //
 // Widening FMA: vfwmacc.vf v20, fc_f16, vi
 //   reads vi as e16,m1 (FP16) and fc_f16 as FP16 scalar (low 16 bits of freg)
@@ -38,15 +44,21 @@ static void fconv3d_CHx3x3_block_f16(float *o, const _Float16 *i, const _Float16
     const _Float16 *i_row = i;
     float          *o_row = o;
 
-    for (int64_t m = 0; m < M; ++m) {
-        // ---- init FP32 accumulator v20 (e32,m2) with bias ----
-        // vsetvli zero, zero retains current vl while changing vtype.
-        // VLMAX(e32,m2) == VLMAX(e16,m1), so the existing vl stays valid.
-        asm volatile("vsetvli zero, zero, e32, m2, ta, ma");
-        asm volatile("vfmv.v.f v20, %0" :: "f"(bias));
+    // ---- splat the FP32 bias into v22-v23, once for all M rows ----
+    // vl = VLMAX(e32,m2) covers the whole group, so the tail is bias too and the
+    // whole-register vmv2r.v below is always well defined.
+    // The m2 -> m1 vsetvli that follows is the only WAIT_IDLE drain in this
+    // function: Ara stalls on an LMUL *decrease*, and the row loop never touches
+    // vtype again. On entry vtype is e16,m1 with vl = n_; we restore that here.
+    unsigned long int vlmax_e32m2;
+    asm volatile("vsetvli %0, zero, e32, m2, ta, ma" : "=r"(vlmax_e32m2));
+    asm volatile("vfmv.v.f v22, %0" :: "f"(bias));
+    asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(n_));
 
-        // ---- switch to FP16 source config for the channel loop ----
-        asm volatile("vsetvli zero, zero, e16, m1, ta, ma");
+    for (int64_t m = 0; m < M; ++m) {
+        // ---- init FP32 accumulator v20 (e32,m2) from the bias copy ----
+        // vmv<nr>r.v ignores vtype entirely, so no vsetvli is needed here.
+        asm volatile("vmv2r.v v20, v22");
 
         for (int64_t ch = 0; ch < C; ++ch) {
             const _Float16 *row0 = i_row + ch * ich_len;
@@ -84,7 +96,9 @@ static void fconv3d_CHx3x3_block_f16(float *o, const _Float16 *i, const _Float16
         }
 
         // ---- store FP32 accumulator ----
-        asm volatile("vsetvli zero, zero, e32, m2, ta, ma");
+        // Unit-stride stores take EEW from the opcode, not vtype:
+        // EMUL = LMUL * (EEW/SEW) = 1 * (32/16) = 2, so this writes vl FP32
+        // elements out of v20-v21 while vtype stays e16,m1.
         asm volatile("vse32.v v20, (%0)" :: "r"(o_row));
 
         o_row = (float          *)((uintptr_t)o_row + ldo);
@@ -124,10 +138,14 @@ static void fconv3d_CHx3x3_block_f16_f16out(_Float16 *o, const _Float16 *i, cons
     const _Float16 *i_row = i;
     _Float16       *o_row = o;
 
+    // Bias splat hoisted out of the row loop; see fconv3d_CHx3x3_block_f16.
+    unsigned long int vlmax_e32m2;
+    asm volatile("vsetvli %0, zero, e32, m2, ta, ma" : "=r"(vlmax_e32m2));
+    asm volatile("vfmv.v.f v22, %0" :: "f"(bias));
+    asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(n_));
+
     for (int64_t m = 0; m < M; ++m) {
-        asm volatile("vsetvli zero, zero, e32, m2, ta, ma");
-        asm volatile("vfmv.v.f v20, %0" :: "f"(bias));
-        asm volatile("vsetvli zero, zero, e16, m1, ta, ma");
+        asm volatile("vmv2r.v v20, v22");
 
         for (int64_t ch = 0; ch < C; ++ch) {
             const _Float16 *row0 = i_row + ch * ich_len;
@@ -161,9 +179,9 @@ static void fconv3d_CHx3x3_block_f16_f16out(_Float16 *o, const _Float16 *i, cons
             asm volatile("vfwmacc.vf v20, %0, v16" :: "f"(fc[8]));
         }
 
-        // Narrow FP32 accumulator → FP16 output
-        // VLMAX(e32,m2) == VLMAX(e16,m1), so vl is valid for both configs.
-        asm volatile("vsetvli zero, zero, e16, m1, ta, ma");
+        // Narrow FP32 accumulator → FP16 output. vfncvt.f.f.w takes the *narrow*
+        // SEW from vtype and widens the source implicitly, so e16,m1 is already
+        // the correct config — no vsetvli needed.
         asm volatile("vfncvt.f.f.w v0, v20");
         asm volatile("vse16.v v0, (%0)" :: "r"(o_row));
 

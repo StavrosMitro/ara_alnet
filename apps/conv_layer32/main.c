@@ -44,10 +44,26 @@ static int metrics_TP[OUT_LAYER];
 
 static float act_conv1[ALEXNET_STATIC_MAX_BATCH * CONV1_OUT_UNITS];
 
+// Vectorized: the scalar loop cost ~1108 cycles for 64 floats (the build uses
+// -fno-vectorize, so it stayed scalar) and was the largest remaining item in the
+// forward pass -- larger than the convolution itself (128 cycles).
 static void zero_f32(float *buf, int n)
 {
-    for (int i = 0; i < n; i++) {
-        buf[i] = 0.0f;
+    size_t remaining = (size_t)n;
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the caller's vl and only
+    // changes vtype -- it does NOT select VLMAX. The splat then fills just those
+    // lanes while the drain loop below stores at vl = min(n, VLMAX), writing the
+    // untouched lanes out as GARBAGE instead of zeros. rd != x0 with rs1 = x0
+    // requests AVL = ~0 -> vl = VLMAX, so the whole register group is zeroed.
+    size_t vlmax_z;
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_z));
+    asm volatile("vmv.v.i v16, 0");
+    while (remaining > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vse32.v v16, (%0)" :: "r"(buf));
+        buf += vl;
+        remaining -= vl;
     }
 }
 

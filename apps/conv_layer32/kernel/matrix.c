@@ -125,6 +125,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
     fmatmul(fmatmul_c_scratch, fmatmul_a_scratch, b,
             padded_m, (unsigned long int)N, (unsigned long int)K);
 
+    // Overwrite c with the M real rows (padded path == fast path: c = a*b).
     size_t remaining_mk = mk;
     const float *src_mk = fmatmul_c_scratch;
     float *dst_mk = c;
@@ -133,9 +134,7 @@ void matrix_multiply(const float *a, const float *b, float *c, const int M, cons
         size_t vl = 0;
         asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
         asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
@@ -246,13 +245,13 @@ void matrix_multiply_nt(const float *a, const float *b, float *c,
     unsigned long int block = fmatmul_row_block((unsigned long int)M);
     unsigned long int padded_m = (((unsigned long int)M + block - 1) / block) * block;
 
-    // if ((unsigned long int)N > FMATMUL_MAX_N ||
-    //     (unsigned long int)K > FMATMUL_MAX_K ||
-    //     padded_m > FMATMUL_MAX_M)
-    // {
-    //     matrix_multiply_scalar_nt(a, b, c, M, N, K);
-    //     return;
-    // }
+    if ((unsigned long int)N > FMATMUL_MAX_N ||
+        (unsigned long int)K > FMATMUL_MAX_K ||
+        padded_m > FMATMUL_MAX_M)
+    {
+        printf_("Error: matrix_multiply_nt workspace overflow (M=%d N=%d K=%d)\n", M, N, K);
+        exit(1);
+    }
 
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;

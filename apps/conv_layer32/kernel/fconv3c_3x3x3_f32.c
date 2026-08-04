@@ -20,9 +20,15 @@ static void fconv3d_CHx3x3_block_f32(float *o, const float *i, const float *f,
     float *o_row = o;
 
     for (int64_t m = 0; m < M; ++m) { //m because of padding
-        // asm volatile("vmv.v.i v20, 0");
+        // v20 accumulates the fc[0,3,6] taps (seeded with bias); v22 and v24
+        // accumulate the fc[1,4,7] and fc[2,5,8] taps. All three MUST be reset
+        // every output row -- v22/v24 were previously left un-zeroed, so they
+        // carried a running sum across rows (a ~28x blow-up + per-row ramp in
+        // the conv output). bias belongs only in v20.
         asm volatile("vfmv.v.f v20, %0" :: "f"(bias));
-        
+        asm volatile("vmv.v.i v22, 0");
+        asm volatile("vmv.v.i v24, 0");
+
         for (int64_t ch = 0; ch < C; ++ch) {
             const float *row0 = i_row + ch * ich_len;
             const float *row1 = row0 + (N + 2);
@@ -45,17 +51,19 @@ static void fconv3d_CHx3x3_block_f32(float *o, const float *i, const float *f,
 
             const float *fc = f + ch * fch_len;
             asm volatile("vfmacc.vf v20, %0, v0"  :: "f"(fc[0]));
-            asm volatile("vfmacc.vf v20, %0, v2"  :: "f"(fc[1]));
-            asm volatile("vfmacc.vf v20, %0, v4"  :: "f"(fc[2]));
+            asm volatile("vfmacc.vf v22, %0, v2"  :: "f"(fc[1]));
+            asm volatile("vfmacc.vf v24, %0, v4"  :: "f"(fc[2]));
             asm volatile("vfmacc.vf v20, %0, v6"  :: "f"(fc[3]));
-            asm volatile("vfmacc.vf v20, %0, v8"  :: "f"(fc[4]));
-            asm volatile("vfmacc.vf v20, %0, v10" :: "f"(fc[5]));
+            asm volatile("vfmacc.vf v22, %0, v8"  :: "f"(fc[4]));
+            asm volatile("vfmacc.vf v24, %0, v10" :: "f"(fc[5]));
             asm volatile("vfmacc.vf v20, %0, v12" :: "f"(fc[6]));
-            asm volatile("vfmacc.vf v20, %0, v14" :: "f"(fc[7]));
-            asm volatile("vfmacc.vf v20, %0, v16" :: "f"(fc[8]));
+            asm volatile("vfmacc.vf v22, %0, v14" :: "f"(fc[7]));
+            asm volatile("vfmacc.vf v24, %0, v16" :: "f"(fc[8]));
         }
 
         // asm volatile("vfadd.vf v20, v20, %0" :: "f"(bias));
+        asm volatile("vfadd.vv v20, v20, v22"); // v20 = v20 + v22
+        asm volatile("vfadd.vv v20, v20, v24"); // v20 = v20 + v24
         asm volatile("vse32.v v20, (%0)" :: "r"(o_row));
 
         o_row = (float *)((uintptr_t)o_row + ldo);

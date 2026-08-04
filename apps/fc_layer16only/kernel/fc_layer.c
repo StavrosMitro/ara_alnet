@@ -1,7 +1,8 @@
 //
 // File:        fc_layer.c
 // Description: Pure FP16 fully connected layer
-//              - Static input scaling (×1/8) in forward pass
+//              - Optional static input scaling, folded into the weights at load
+//                time (INPUT_SCALE, disabled by default)
 //              - Dynamic loss scaling via RISC-V fflags CSR in backward pass
 // Author:      Haris Wang
 // FP16 refactor: Stavros Mitropoulos, NTUA
@@ -36,11 +37,28 @@
 #define FMATMUL_MAX_N FC_MAX_IN_UNITS
 #define FMATMUL_MAX_K FC_MAX_IN_UNITS
 
-// Scale input by 2^-3 before forward matmul (exact power-of-2: no rounding error).
-// Keeps worst-case FP16 accumulator sum well below 65504.
-#define INPUT_SCALE   ((_Float16)0.00390625f)
-
-#define LEARNING_RATE ((_Float16)0.001f)
+// ---------------------------------------------------------------------------
+// INPUT_SCALE: optional forward-pass overflow guard. An exact power of two, so
+// it contributes no rounding error of its own.
+//
+// It is applied ONLY by pre-absorbing it into the weights at load time (see
+// load_fc_weights below), using (A * s) * W == A * (W * s). It is deliberately
+// NOT applied per-step inside fc_op_forward.
+//
+// It previously scaled the input copy in the PADDED branch but not on the
+// unpadded fast path, so the same layer produced outputs a factor of 32 apart
+// depending only on whether batchsize happened to land on a padding boundary
+// (the surrounding comments claimed x1/8; the value was 2^-5 = 1/32). Folding it
+// into the weights is consistent across both branches and free, whereas a
+// per-step scaling pass would charge FP16 a vector multiply over the entire
+// input that fc_layer32 never pays -- breaking the FLOP and memory-traffic
+// parity this A/B benchmark depends on.
+//
+// Default 1.0 = disabled, matching the FP32 sibling exactly. Override with
+// -DINPUT_SCALE=... to explore FP16 forward headroom.
+#ifndef INPUT_SCALE
+#define INPUT_SCALE   ((_Float16)1.0f)
+#endif
 
 static inline unsigned long int fmatmul_row_block(unsigned long int m)
 {
@@ -96,12 +114,18 @@ void fc_op_forward(fc_op *op)
     if (padded_m == (unsigned long int)op->batchsize) {
         // No padding needed: pass input/output buffers directly.
         // INPUT_SCALE is pre-absorbed into weights at load time.
+        // Clear immediately before the matmul so the OF/UF read below reflects
+        // the dot-product accumulation only (not surrounding vector setup).
+        CLEAR_FFLAGS();
         fmatmul_fused_16(op->output, op->input, op->weights, op->bias,
                          padded_m,
                          (unsigned long int)op->in_units,
                          (unsigned long int)op->out_units);
     } else {
-        // Padding needed: fuse INPUT_SCALE into the copy, zero-pad the rest.
+        // Padding needed: straight copy of the real rows, zero-pad the rest.
+        // No scaling here -- INPUT_SCALE lives in the weights (see above), so
+        // this branch and the fast path above compute the identical function,
+        // and the copy is a pure load/store exactly like fc_layer32's.
         size_t remaining_mn = mn;
         const _Float16 *src_mn = op->input;
         _Float16 *dst_mn = fmatmul_a_scratch;
@@ -110,7 +134,6 @@ void fc_op_forward(fc_op *op)
             size_t vl = 0;
             asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
             asm volatile("vle16.v v0, (%0);"       : : "r"(src_mn) : "memory");
-            asm volatile("vfmul.vf v0, v0, %0"     : : "f"(INPUT_SCALE));
             asm volatile("vse16.v v0, (%0);"       : : "r"(dst_mn) : "memory");
             src_mn += vl;
             dst_mn += vl;
@@ -129,6 +152,9 @@ void fc_op_forward(fc_op *op)
             remaining_pad -= vl;
         }
 
+        // Clear immediately before the matmul, same as the fast path above, so
+        // the OF/UF read below reflects the dot-product accumulation only.
+        CLEAR_FFLAGS();
         fmatmul_fused_16(fmatmul_c_scratch_16, fmatmul_a_scratch, op->weights, op->bias,
                          padded_m,
                          (unsigned long int)op->in_units,
@@ -150,23 +176,59 @@ void fc_op_forward(fc_op *op)
             remaining_mk -= vl;
         }
     }
+
+    // Forward pass has no scale to fall back on: report (but do not act on) an
+    // OVERFLOW, which is the catastrophic case — outputs saturate to inf/max-normal
+    // and poison the softmax (inf - inf = NaN) downstream. We deliberately do NOT
+    // warn on UF here: forward underflow is benign (minor activation precision loss)
+    // and, for this workload, the raw matmul produces subnormal products every step,
+    // so a UF warning would be pure always-on noise. The copy-back above is pure
+    // load/store, so these flags still reflect the matmul accumulation.
+    unsigned int fwd_flags = 0;
+    READ_FFLAGS(fwd_flags);
+    if (fwd_flags & FFLAG_OVERFLOW_MASK)
+        printf_("[FP16 WARN] fc_op_forward: OVERFLOW (fflags=0x%x) — output saturated to inf/max-normal, softmax will see NaN\n",
+                fwd_flags);
 }
 
 // ---------------------------------------------------------------------------
 // Backward pass with dynamic loss scaling
 //
-// 1. Scale d_output UP by dynamic_loss_scale (prevents gradient underflow).
-// 2. CLEAR_FFLAGS.
+// 1. CLEAR_FFLAGS *before* touching d_output, so overflow raised by the
+//    scale-up multiply itself is also caught (not just the matmuls).
+// 2. Scale d_output UP by dynamic_loss_scale (prevents gradient underflow).
 // 3. Compute d_input, d_bias, d_weights (all operate on scaled gradients).
 // 4. READ_FFLAGS.
-// 5a. Overflow → halve scale, skip weight update, return 0.
-// 5b. Clean  → unscale d_weights, SGD update, track steps; double scale
-//              after 200 consecutive clean steps. Return 1.
+// 5a. Overflow (OF) → halve scale, return 0. Gradients are saturated garbage;
+//     the caller must NOT run the optimizer this step.
+// 5b. Underflow (UF, and no OF) → gradients are still usable (only tiny terms
+//     were lost). Unscale and return 1; grow the scale only after UF has
+//     persisted for UF_DEBOUNCE_STEPS consecutive steps (a single UF is noise).
+//     Persistent UF pre-empts the clean-step counter.
+// 5c. Clean → unscale d_weights AND d_bias back to true magnitude, track steps;
+//     double scale after 1000 consecutive clean steps. Return 1.
+//
+// The scale is clamped to [MIN_LOSS_SCALE, MAX_LOSS_SCALE] so unbounded doubling
+// (UF every step, or the 1000-step growth) can never push it to inf, which would
+// silently turn every scaled d_output into inf.
+//
+// The optimizer itself lives in train.c (gradient_descent). This function only
+// produces gradients and the verdict on whether they are usable. d_input keeps
+// the loss scale so it propagates to any previous layer's FP16 gradient chain.
 // ---------------------------------------------------------------------------
+#define MIN_LOSS_SCALE ((_Float16)1.0f)
+#define MAX_LOSS_SCALE ((_Float16)32768.0f)   // 2^15, leaves headroom below 65504
+// FP16 matmuls raise UF readily (many tiny products round to subnormal) even when
+// the gradients are fine, so a single UF is noise. Only grow the scale once UF has
+// persisted for this many consecutive steps — that signals *systematic* gradient
+// underflow, not one-step rounding.
+#define UF_DEBOUNCE_STEPS 8
+
 int fc_op_backward(fc_op *op, fc_backward_cycle_breakdown *cycles)
 {
     static _Float16 dynamic_loss_scale = (_Float16)1024.0f;
     static int      successful_steps   = 0;
+    static int      underflow_steps    = 0;
 
     int64_t t0 = 0;
 
@@ -181,12 +243,13 @@ int fc_op_backward(fc_op *op, fc_backward_cycle_breakdown *cycles)
         return 0;
     }
 
+    // Arm the OF/UF detector — clear before touching d_output, so overflow in
+    // the scale-up multiply itself is caught alongside the matmul kernels.
+    CLEAR_FFLAGS();
+
     // Scale d_output up so small gradients survive FP16 underflow.
     const size_t d_out_elems = (size_t)op->batchsize * (size_t)op->out_units;
     vector_scale_fp16(op->d_output, dynamic_loss_scale, d_out_elems);
-
-    // Arm the overflow detector — clear before all backward kernels.
-    CLEAR_FFLAGS();
 
     // d_input = d_output * weights^T
     t0 = fc_cycle_count_local();
@@ -206,60 +269,57 @@ int fc_op_backward(fc_op *op, fc_backward_cycle_breakdown *cycles)
                           op->batchsize, op->in_units, op->out_units);
     if (cycles) cycles->d_weights_cycles += fc_cycle_count_local() - t0;
 
-    // Check whether any active-element vector FP op overflowed.
+    // Check which FP exceptions any active-element vector op raised.
     unsigned int flags = 0;
     READ_FFLAGS(flags);
 
     if (flags & FFLAG_OVERFLOW_MASK) {
-        // Gradient magnitude exceeded FP16 range — halve scale and skip update.
+        // Gradient magnitude exceeded FP16 range — the values are saturated to
+        // inf/max-normal (garbage). Halve scale and skip the optimizer update.
         dynamic_loss_scale *= (_Float16)0.5f;
-        successful_steps    = 0;
+        if (dynamic_loss_scale < MIN_LOSS_SCALE)
+            dynamic_loss_scale = MIN_LOSS_SCALE;
+        successful_steps = 0;
+        underflow_steps  = 0;
         return 0;
     }
 
-    // Unscale d_weights before SGD (d_input is passed to the previous layer as-is).
+    // No overflow: the gradients are usable. Unscale FIRST, using the scale that
+    // was actually applied to them, before mutating dynamic_loss_scale for the
+    // next step. d_bias is derived from the same scaled d_output as d_weights, so
+    // it carries the scale too. (d_input is passed to the previous layer still
+    // scaled, by design.)
     const _Float16 inv_scale    = (_Float16)1.0f / dynamic_loss_scale;
     const size_t   weight_count = (size_t)op->in_units * (size_t)op->out_units;
     vector_scale_fp16(op->d_weights, inv_scale, weight_count);
+    vector_scale_fp16(op->d_bias,    inv_scale, (size_t)op->out_units);
 
-    _Float16 lr_test = LEARNING_RATE;
-    _Float16 dw_test = op->d_weights[0];
-    _Float16 update_val = lr_test * dw_test;
-    printf_("Test Update: dw=%f, update_val=%f\n", (float)dw_test, (float)update_val);
-    // SGD weight update: w -= lr * dw  (vectorised via fmatmul.c helper)
-    const size_t bias_count = (size_t)op->out_units;
-    size_t rem;
-    _Float16 *w_ptr  = op->weights;
-    _Float16 *dw_ptr = op->d_weights;
-    rem = weight_count;
-    while (rem > 0) {
-        size_t vl;
-        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(rem));
-        asm volatile("vle16.v v8,  (%0)" :: "r"(w_ptr));
-        asm volatile("vle16.v v16, (%0)" :: "r"(dw_ptr));
-        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(LEARNING_RATE));
-        asm volatile("vse16.v v8,  (%0)" :: "r"(w_ptr) : "memory");
-        w_ptr += vl; dw_ptr += vl; rem -= vl;
+    // Adjust the scale for the NEXT step. Underflow (UF) means tiny terms were
+    // lost to FP16 subnormals. A single UF is just rounding noise, so we grow the
+    // scale only after UF has persisted for UF_DEBOUNCE_STEPS consecutive steps —
+    // i.e. gradients are *systematically* underflowing. UF is checked only when OF
+    // is absent, so a saturating step never masquerades as an underflow. Persistent
+    // UF pre-empts the clean-step counter; absent both, grow after 1000 clean steps.
+    if (flags & FFLAG_UNDERFLOW_MASK) {
+        successful_steps = 0;
+        underflow_steps++;
+        if (underflow_steps >= UF_DEBOUNCE_STEPS) {
+            dynamic_loss_scale *= (_Float16)2.0f;
+            if (dynamic_loss_scale > MAX_LOSS_SCALE)
+                dynamic_loss_scale = MAX_LOSS_SCALE;
+            underflow_steps = 0;
+        }
+    } else {
+        underflow_steps = 0;
+        successful_steps++;
+        if (successful_steps > 1000) {
+            dynamic_loss_scale *= (_Float16)2.0f;
+            if (dynamic_loss_scale > MAX_LOSS_SCALE)
+                dynamic_loss_scale = MAX_LOSS_SCALE;
+            successful_steps = 0;
+        }
     }
 
-    w_ptr  = op->bias;
-    dw_ptr = op->d_bias;
-    rem = bias_count;
-    while (rem > 0) {
-        size_t vl;
-        asm volatile("vsetvli %0, %1, e16, m8, ta, ma" : "=r"(vl) : "r"(rem));
-        asm volatile("vle16.v v8,  (%0)" :: "r"(w_ptr));
-        asm volatile("vle16.v v16, (%0)" :: "r"(dw_ptr));
-        asm volatile("vfnmsac.vf v8, %0, v16" :: "f"(LEARNING_RATE));
-        asm volatile("vse16.v v8,  (%0)" :: "r"(w_ptr) : "memory");
-        w_ptr += vl; dw_ptr += vl; rem -= vl;
-    }
-
-    successful_steps++;
-    if (successful_steps > 200) {
-        dynamic_loss_scale *= (_Float16)2.0f;
-        successful_steps    = 0;
-    }
     return 1;
 }
 
@@ -323,8 +383,9 @@ void save_fc_weights(fc_op *op)
 
 void load_fc_weights(fc_op *op, _Float16 *w_array, _Float16 *b_array)
 {
-    // Pre-absorb INPUT_SCALE into the weights so the fast-path forward pass
-    // (no padding) can use the input buffer directly without a separate scale step.
+    // Pre-absorb INPUT_SCALE into the weights. This is the ONLY place the scale
+    // is applied, so both forward branches (padded and not) compute the same
+    // function and neither pays a per-step scaling pass.
     // Equivalent: (A * INPUT_SCALE) * W  ==  A * (W * INPUT_SCALE)
     const size_t nw = (size_t)op->in_units * (size_t)op->out_units;
     size_t rem = nw;

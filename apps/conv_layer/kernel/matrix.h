@@ -6,6 +6,9 @@
 // #include <stdlib.h>
 
 void matrix_multiply(const float *a, const float *b, float *c, const int M, const int N, const int K);
+// Mixed precision: a,b FP16 -> c FP32. Row-pads M like matrix_multiply().
+void matrix_multiply_f16(const _Float16 *a, const _Float16 *b, float *c,
+                         const int M, const int N, const int K);
 void matrix_multiply_fused(const float *a, const float *b, const float *bias,
 						   float *c, const int M, const int N, const int K);
 void matrix_multiply_nt(const float *a, const float *b, float *c,

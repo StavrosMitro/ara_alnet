@@ -1,0 +1,56 @@
+MiniVGGNet training — batchsize=32  epochs=20  classes=100
+MiniVGGNet  (CONV->ACT->BN, no dropout)
+  input      3 x 32 x 32
+  conv1/bn1  12 x 32 x 32   3x3
+  conv2/bn2  12 x 32 x 32   3x3
+  pool1      12 x 16 x 16   2x2
+  conv3/bn3  24 x 16 x 16   3x3
+  conv4/bn4  24 x 16 x 16   3x3
+  pool2      24 x 8 x 8   2x2
+  fc1/bn5    192   (in 1536)
+  fc2        100
+  parameters 324400
+  dropout    pool1=0.00 pool2=0.00 fc=0.00
+
+Trainable layers:
+  conv1: 1
+  conv2: 1
+  conv3: 1
+  conv4: 1
+  bn1: 1
+  bn2: 1
+  bn3: 1
+  bn4: 1
+  bn5: 1
+  fc1: 1
+  fc2: 1
+Total trainable layers: 11/11
+
+--- Accuracy before training ---
+dataset split: 52 train / 12 eval (held out, never trained on)
+eval: 0 / 12 correct  acc=0.0000  macro-F1=0.0000 (over 16 classes)
+train: lr=0.01000  momentum=0.90  wd=0.00050  epochs=20  steps/epoch=1  conv stack TRAINABLE
+epoch 1/20  lr=0.010000  loss=5.7091  train acc=0.0000 (0/32)
+epoch 2/20  lr=0.010000  loss=4.7831  train acc=0.0000 (0/32)
+epoch 3/20  lr=0.010000  loss=3.9659  train acc=0.1250 (4/32)
+epoch 4/20  lr=0.010000  loss=3.3341  train acc=0.3125 (10/32)
+epoch 5/20  lr=0.010000  loss=2.5276  train acc=0.5312 (17/32)
+epoch 6/20  lr=0.010000  loss=1.6893  train acc=0.7188 (23/32)
+epoch 7/20  lr=0.010000  loss=1.1632  train acc=0.8438 (27/32)
+epoch 8/20  lr=0.010000  loss=0.8295  train acc=0.9062 (29/32)
+epoch 9/20  lr=0.010000  loss=0.4662  train acc=0.9688 (31/32)
+epoch 10/20  lr=0.010000  loss=0.4119  train acc=0.9375 (30/32)
+epoch 11/20  lr=0.010000  loss=0.2732  train acc=1.0000 (32/32)
+epoch 12/20  lr=0.010000  loss=0.1873  train acc=1.0000 (32/32)
+epoch 13/20  lr=0.010000  loss=0.0859  train acc=1.0000 (32/32)
+epoch 14/20  lr=0.010000  loss=0.0949  train acc=1.0000 (32/32)
+epoch 15/20  lr=0.010000  loss=0.0610  train acc=1.0000 (32/32)
+epoch 16/20  lr=0.010000  loss=0.0373  train acc=1.0000 (32/32)
+epoch 17/20  lr=0.010000  loss=0.0361  train acc=1.0000 (32/32)
+epoch 18/20  lr=0.010000  loss=0.0330  train acc=1.0000 (32/32)
+epoch 19/20  lr=0.010000  loss=0.0279  train acc=1.0000 (32/32)
+epoch 20/20  lr=0.010000  loss=0.0241  train acc=1.0000 (32/32)
+  LR step decay → 0.001000
+
+--- Accuracy after training ---
+eval: 1 / 12 correct  acc=0.0833  macro-F1=0.0351 (over 19 classes)

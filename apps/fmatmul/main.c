@@ -67,12 +67,16 @@ static void llc_flush_halt(void) {
     unsigned int ways = llc[0x28/4];
     unsigned int mask = (ways >= 32) ? 0xFFFFFFFFu : ((1u << ways) - 1u);
     llc[0x8/4] = mask; llc[0xc/4] = 0; llc[0x10/4] = 1;   // flush all ways -> DDR
-    while (llc[0x18/4] != mask) { }                        // wait writeback done
-    // UN-FLUSH (re-enable the ways) before halting, like test_vsuite does.
-    // Without this, the ways stay disabled and every SUBSEQUENT run silently
-    // executes in LLC-bypass mode -- a hidden state change between runs.
-    llc[0x8/4] = 0; llc[0xc/4] = 0; llc[0x10/4] = 1;
-    while (llc[0x18/4] != 0) { }
+    // Poll CFG_FLUSH (0x8), NOT FLUSHED (0x18): FLUSHED is a live "ways with
+    // no valid tags" bitmap, and axi_llc_config.sv FsmEndFlush overwrites it
+    // with cfg_spm (=0) on the LAST way, so it never reaches the mask and the
+    // old `while (llc[0x18/4] != mask)` spun forever. CFG_FLUSH is cleared by
+    // hardware exactly when the flush FSM returns to idle.
+    while (llc[0x8/4] != 0) { }                            // wait writeback done
+    // No UN-FLUSH needed: FsmEndFlush already restores flushed = cfg_spm, so
+    // the ways are re-enabled automatically. (The old un-flush was based on
+    // the same misreading of FLUSHED and polled a condition that was already
+    // true, so it was a no-op at best.)
     for (;;) { }                                           // halt
 }
 
@@ -94,6 +98,17 @@ int verify_matrix(double *result, double *gold, size_t R, size_t C,
 }
 
 int main() {
+  // DIAG (zero-bitstream experiment): disable the CVA6<->Ara memory
+  // consistency mode (custom CSR 0x7C2, resets to 1). This turns OFF the
+  // axi_inval_filter, so Ara stores no longer wait for CVA6 to accept L1
+  // invalidations -- the prime suspect for the core-complex deadlock (ILA
+  // showed ALL AXI paths idle during the wedge; the inval handshake is the
+  // one blocking dependency that is invisible to every AXI probe).
+  // If the kernel now completes, the invalidation deadlock is CONFIRMED.
+  // Risk: verify_matrix could read stale c[] lines from L1 (wrong result,
+  // NOT a hang -- distinguishable; c[] is never read before the kernel, so
+  // it is likely not even cached and verify should still pass).
+  asm volatile("csrwi 0x7C2, 0");
   DBG(0x100);   // main entered (before any printf)
   CKPT(1);      // reached main
   printf("\n");

@@ -66,8 +66,8 @@ static inline int64_t alexnet_cycle_count_local(void)
 #endif
 #endif
 
-#define FC_INPUT_UNITS 2048
-#define FC_OUTPUT_UNITS 512
+#define FC_INPUT_UNITS 128
+#define FC_OUTPUT_UNITS 128
 #ifndef FC_TOTAL_SAMPLES
 #define FC_TOTAL_SAMPLES 4
 #endif
@@ -721,7 +721,11 @@ void compute_batch_metrics(const int *preds, const int *labels, int batchsize)
     for (int i = 0; i < batchsize; i++)
         if (preds[i] == labels[i]) correct++;
     float accuracy = (float)correct / batchsize;
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch accuracy:  %.4f  (%d / %d correct)\n", accuracy, correct, batchsize);
+#else
+    (void)accuracy;
+#endif
 
     int *true_pos = metrics_true_pos;
     int *false_pos = metrics_false_pos;
@@ -760,5 +764,9 @@ void compute_batch_metrics(const int *preds, const int *labels, int batchsize)
         }
     }
     float macro_f1 = (class_count > 0) ? f1_sum / class_count : 0.0f;
+#ifdef SHOW_METRIC_EVALUTE
     printf_("batch macro F1:  %.4f  (over %d classes)\n", macro_f1, class_count);
+#else
+    (void)macro_f1;
+#endif
 }

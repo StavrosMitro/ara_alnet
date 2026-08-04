@@ -1,0 +1,20 @@
+test to see if it compiled 14:36!
+batch size: 1 
+epochs: 1 
+batchsize in setup
+Network pointers use weights.c arrays directly (no parameter buffer copy).
+  conv1: 1
+Total trainable layers: 1/1
+DEBUG: precompute_img2col_offsets_static called
+  out_h=1, out_w=64, in_channels=1, kk=9, ikk=9
+  total_gather_elements=576, MAX_GATHER_ELEMENTS=2359296
+precomputation cycles: 1415
+DEBUG: After precomputation, total_gather_elements should be set
+>>>>>>>>>>>>>>>>>>>> epoch 1 >>>>>>>>>>>>>>>>>>>>>>
+cycles[epoch 1 batch 1/1]: prep=374, forward=292, loss=123, zero_d_input=64, backward=834, update=198
+conv backward breakdown: d_input=559, d_bias=48, d_weights_im2col=45, d_weights_total=117, total=724
+epoch 1 step 1/1 loss: 0.691072
+===== Training Summary =====
+precomputation cycles (one-time): 1415
+============================
+

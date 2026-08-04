@@ -17,7 +17,7 @@
 
 #include "fc_layer.h"
 
-#define SHOW_PREDCITION_DETAIL
+//#define SHOW_PREDCITION_DETAIL
 //#define SHOW_METRIC_EVALUTE
 //#define SHOW_OP_TIME
 
@@ -61,9 +61,9 @@
 #define FEATURE3_L 8
 #define FEATURE4_L 8
 #define FEATURE5_L 8
-#define POOLING5_L 4
+#define POOLING5_L 1
 
-#define FC6_LAYER   512
+#define FC6_LAYER   128
 #define FC7_LAYER   512
 // #define OUT_LAYER   1000 FOR IMAGENET
 #define OUT_LAYER   10 // FOR TINY IMAGENET

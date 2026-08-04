@@ -55,9 +55,19 @@ void fmatmul(double *c, const double *a, const double *b,
   } else if (M <= 64) {
     fmatmul_16x16(c, a, b, M, N, P);
   } else if (M <= 128) {
+    // DIAG (LMUL=2 experiment): this branch normally calls fmatmul_8x8, the ONLY
+    // kernel in this file using "vsetvli e64, m2". Every observed hang goes
+    // through it -- 8x8 on the no-LLC bitstream, and 128x128 on the LLC
+    // bitstream (frozen at k=4 of the first block, before any vector store).
+    // Everything that PASSES uses a different LMUL: fmatmul_4x4 (m4) completed
+    // and printed its 4x4 result, and test_vsuite's m1/m4 phases pass -- it
+    // never exercises m2. So LMUL=2 is the one untested variable. Route
+    // 128x128 through the m4 kernel: if it now completes, LMUL=2 is the bug.
+    // Revert by restoring the fmatmul_8x8 call below.
     // Vector length is 64 elements. With an 8x8 matmul,
     // we can use LMUL=2, having a vl of 128.
-    fmatmul_8x8(c, a, b, M, N, P);
+    // fmatmul_8x8(c, a, b, M, N, P);
+    fmatmul_4x4(c, a, b, M, N, P);
   } else {
     // Vector length is 64 elements. With an 4x4 matmul,
     // we can use LMUL=4, having a vl of 256.

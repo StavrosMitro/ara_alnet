@@ -5,6 +5,9 @@
 // FP16 refactor: Stavros Mitropoulos, NTUA
 //
 
+#ifndef FC_LAYER_H
+#define FC_LAYER_H
+
 #include <stdint.h>
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
@@ -36,14 +39,17 @@ typedef struct fc_backward_cycle_breakdown {
 
 // ---------------------------------------------------------------------------
 // Forward pass
-// Sets frm=RNE, scales input ×(1/8) before fmatmul to prevent FP16 overflow.
+// Sets frm=RNE, scales input ×(2^-5) before fmatmul to prevent FP16 overflow.
 // ---------------------------------------------------------------------------
 void fc_op_forward(fc_op *op);
 
 // ---------------------------------------------------------------------------
 // Backward pass with dynamic loss scaling via fflags overflow detection.
-// Returns 1 when the weight update was applied, 0 when the step was skipped
-// (overflow detected — scale was halved, caller should not apply SGD externally).
+// Computes d_input, d_bias and d_weights only — it does NOT touch the weights;
+// the optimizer lives in train.c (gradient_descent).
+// Returns 1 when d_weights/d_bias are valid and unscaled, ready for the
+// optimizer; 0 when an FP16 overflow was detected (loss scale has been halved,
+// gradients are garbage — the caller must skip the update this step).
 // ---------------------------------------------------------------------------
 int fc_op_backward(fc_op *op, fc_backward_cycle_breakdown *cycles);
 
@@ -57,3 +63,5 @@ void calloc_fc_dweights(fc_op *op);
 void free_fc_dweights(fc_op *op);
 void load_fc_weights(fc_op *op, _Float16 *w_array, _Float16 *b_array);
 void save_fc_weights(fc_op *op);
+
+#endif // FC_LAYER_H

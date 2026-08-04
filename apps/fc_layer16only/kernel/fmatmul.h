@@ -34,7 +34,11 @@
 // Read FP exception flags into an unsigned int lvalue.
 #define READ_FFLAGS(flags)  asm volatile("csrr %0, fflags" : "=r"(flags))
 // Bit 2 of fflags = Overflow flag (OF).
-#define FFLAG_OVERFLOW_MASK 0x04u
+#define FFLAG_OVERFLOW_MASK  0x04u
+// Bit 1 of fflags = Underflow flag (UF). Set only when the result is both tiny
+// AND inexact (gradual-underflow HW: an exactly-representable subnormal does not
+// raise it), so it is a usable — if noisy — signal that gradients are decaying.
+#define FFLAG_UNDERFLOW_MASK 0x02u
 
 // ---------------------------------------------------------------------------
 // FP16 helper: in-place vectorised scalar multiply (m8 tile loop, e16 SEW)
@@ -69,16 +73,22 @@ void fmatmul_vec_4x4_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                         unsigned long int n, unsigned long int p);
 void fmatmul_4x4_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                        unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_4x4_slice_init_nt_16(void);
 void fmatmul_vec_4x4_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                             unsigned long int n, unsigned long int p);
 void fmatmul_4x4_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                        unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_4x4_slice_init_tn_16(void);
 void fmatmul_vec_4x4_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
-                            unsigned long int n, unsigned long int p,
-                            unsigned long int lda);
+                            unsigned long int m, unsigned long int p,
+                            unsigned long int n);
 void fmatmul_4x4_deferred_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                               unsigned long int m, unsigned long int n,
                               unsigned long int p);
+void fmatmul_vec_4x4_slice_init_deferred_16(void);
+void fmatmul_vec_4x4_deferred_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
+                                  unsigned long int n, unsigned long int p,
+                                  unsigned long int p_);
 void fmatmul_4x4_fused_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                            const _Float16 *bias, unsigned long int m,
                            unsigned long int n, unsigned long int p);
@@ -95,13 +105,15 @@ void fmatmul_vec_8x8_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                         unsigned long int n, unsigned long int p);
 void fmatmul_8x8_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                        unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_8x8_slice_init_nt_16(void);
 void fmatmul_vec_8x8_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                             unsigned long int n, unsigned long int p);
 void fmatmul_8x8_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                        unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_8x8_slice_init_tn_16(void);
 void fmatmul_vec_8x8_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
-                            unsigned long int n, unsigned long int p,
-                            unsigned long int lda);
+                            unsigned long int m, unsigned long int p,
+                            unsigned long int n);
 void fmatmul_8x8_fused_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                            const _Float16 *bias, unsigned long int m,
                            unsigned long int n, unsigned long int p);
@@ -118,13 +130,15 @@ void fmatmul_vec_16x16_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                           unsigned long int n, unsigned long int p);
 void fmatmul_16x16_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                          unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_16x16_slice_init_nt_16(void);
 void fmatmul_vec_16x16_nt_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                               unsigned long int n, unsigned long int p);
 void fmatmul_16x16_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                          unsigned long int m, unsigned long int n, unsigned long int p);
+void fmatmul_vec_16x16_slice_init_tn_16(void);
 void fmatmul_vec_16x16_tn_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
-                              unsigned long int n, unsigned long int p,
-                              unsigned long int lda);
+                              unsigned long int m, unsigned long int p,
+                              unsigned long int n);
 void fmatmul_16x16_fused_16(_Float16 *c, const _Float16 *a, const _Float16 *b,
                              const _Float16 *bias, unsigned long int m,
                              unsigned long int n, unsigned long int p);

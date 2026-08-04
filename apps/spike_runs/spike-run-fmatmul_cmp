@@ -1,0 +1,54 @@
+
+=========================
+=  FMATMUL TN vs DEFER  =
+=========================
+
+C[N,P] = A^T * B   (A=[M,N], B=[M,P])
+  tn      : fmatmul_tn_32(c, a, b, s, s, s)
+  deferred: fmatmul_4x4_deferred_32(c, a^T, b^T, s, s, s)
+
+------------------------------------------------------------
+(4 x 4)^T x (4 x 4) -> (4 x 4)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+------------------------------------------------------------
+(8 x 8)^T x (8 x 8) -> (8 x 8)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+------------------------------------------------------------
+(16 x 16)^T x (16 x 16) -> (16 x 16)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+------------------------------------------------------------
+(32 x 32)^T x (32 x 32) -> (32 x 32)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+------------------------------------------------------------
+(64 x 64)^T x (64 x 64) -> (64 x 64)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+------------------------------------------------------------
+(128 x 128)^T x (128 x 128) -> (128 x 128)
+------------------------------------------------------------
+  tn      : 0 cycles, %f FLOP/cycle (%f% util)
+  deferred: 0 cycles, %f FLOP/cycle (%f% util)
+  deferred/tn = %f
+
+Verifying results...
+  tn      : passed.
+deferred: error at index -1

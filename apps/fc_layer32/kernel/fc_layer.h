@@ -5,6 +5,9 @@
 //
 // #include <stdlib.h>
 
+#ifndef FC_LAYER_H
+#define FC_LAYER_H
+
 #include <stdint.h>
 
 #ifndef ALEXNET_STATIC_MAX_BATCH
@@ -45,3 +48,5 @@ inline void free_fc_dweights_32(fc_op *op);
 
 inline void load_fc_weights_32(fc_op *op, float *w_array, float *b_array);
 inline void save_fc_weights_32(fc_op *op );
+
+#endif // FC_LAYER_H

@@ -1,0 +1,282 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <math.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../src/stb_image.h"
+
+//compile with -lm
+
+typedef struct conv_op {
+    float *input;   float *d_input;
+    float *output;  float *d_output;
+    float *weights; float *d_weights;
+    float *bias;    float *d_bias;
+    float *input_col;
+
+    int in_channels, out_channels;
+    int kernel_size; int padding; int stride;
+    int in_w, in_h, out_w, out_h;
+    int in_units, out_units;
+
+    short batchsize;
+} conv_op;
+
+typedef struct {
+    int w;
+    int h;
+    int c;
+    float *data;
+} image;
+
+// ==========================================
+// 2. Συναρτήσεις Εικόνας (από τον κώδικά σου)
+// ==========================================
+
+void make_image(image *img, int w, int h, int c) {
+    img->w = w;
+    img->h = h;
+    img->c = c;
+    img->data = (float *)malloc(h * w * c * sizeof(float));
+}
+
+void free_image(image *img) {
+    if (img->data) free(img->data);
+}
+
+static float get_pixel(image *img, unsigned int x, unsigned int y, unsigned int c) {
+    assert(x < (img->w) && y < (img->h) && c < (img->c));
+    return img->data[c * img->w * img->h + y * img->w + x];
+}
+
+static void set_pixel(image *img, float value, unsigned int x, unsigned int y, unsigned int c) {
+    if (x < 0 || y < 0 || c < 0 || x >= (img->w) || y >= (img->h) || c >= (img->c)) return;
+    assert(x < (img->w) && y < (img->h) && c < (img->c));
+    img->data[c * (img->w) * (img->h) + y * (img->w) + x] = value;
+}
+
+static void add_pixel(image *img, float value, unsigned int x, unsigned int y, unsigned int c) {
+    assert(x < (img->w) && y < (img->h) && c < (img->c));
+    img->data[c * (img->w) * (img->h) + y * (img->w) + x] += value;
+}
+
+void horizontal_flip(image *im) {
+    float *tmp = (float *)malloc(im->w * im->h * im->c * sizeof(float));
+    for (short z = 0; z < im->c; z++) {
+        for (short y = 0; y < im->h; y++) {
+            register int st_idx = y * im->w + z * im->w * im->h;
+            for (short x = 0; x < im->w; x++)
+                tmp[st_idx + x] = im->data[st_idx + im->w - x];
+        }
+    }
+    memcpy(im->data, tmp, im->w * im->h * im->c * sizeof(float));
+    free(tmp);
+}
+
+void resize_image(image *im, int w, int h) {
+    image resized, part;
+    make_image(&resized, w, h, im->c);
+    make_image(&part,  w, im->h, im->c);
+    float   w_scale = (im->w - 1) * 1.0 / (w - 1),
+            h_scale = (im->h - 1) * 1.0 / (h - 1);
+    register float val;
+    register unsigned int r, c, k;
+    for (k = 0; k < im->c; ++k) {
+        for (r = 0; r < im->h; ++r) {
+            for (c = 0; c < w; ++c) {
+                val = 0;
+                if (c == w - 1 || im->w == 1) {
+                    val = get_pixel(im, im->w - 1, r, k);
+                } else {
+                    float sx = c * w_scale;
+                    int   ix = (int)sx;
+                    float dx = sx - ix;
+                    val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix + 1, r, k);
+                }
+                set_pixel(&part, val, c, r, k);
+            }
+        }
+    }
+    for (k = 0; k < im->c; ++k) {
+        for (r = 0; r < h; ++r) {
+            float sy = r * h_scale;
+            int   iy = (int) sy;
+            float dy = sy - iy;
+            for (c = 0; c < w; ++c) {
+                val = (1 - dy) * get_pixel(&part, c, iy, k);
+                set_pixel(&resized, val, c, r, k);
+            }
+            if (r == h - 1 || im->h == 1) continue;
+            for (c = 0; c < w; ++c) {
+                val = dy * get_pixel(&part, c, iy + 1, k);
+                add_pixel(&resized, val, c, r, k);
+            }
+        }
+    }
+
+    free(im->data);
+    im->w = resized.w;
+    im->h = resized.h;
+    im->c = resized.c;
+    im->data = resized.data;
+    resized.data = NULL;
+
+    free_image(&part);
+    free_image(&resized);
+}
+
+image load_image(char *filename, int W, int H, int channels, int is_h_flip) {
+    int w, h, c;
+    unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
+    if (!data) {
+        printf("Error! Can't load image %s! \n", filename);
+        exit(0);
+    }
+    if (channels) { c = channels; } 
+    image img;
+    make_image(&img, w, h, c);
+    register int dst_idx, src_idx;
+    for (int k = 0; k < c; k++) {
+        for (int j = 0; j < h; j++) {
+            for (int i = 0; i < w; i++) {
+                dst_idx = i + w * j + w * h * k;
+                src_idx = k + c * i + c * w * j;
+                img.data[dst_idx] = (float)data[src_idx] / 127.5 - 1; // Κανονικοποίηση [-1, 1]
+            }
+        }
+    }
+    free(data);
+
+    if ((h && w) && (H != img.h || W != img.w)) {
+        resize_image(&img, H, W);
+    }
+        
+    if (is_h_flip) {
+        horizontal_flip(&img);
+    }
+
+    return img;
+}
+
+// ==========================================
+// 3. Η συνάρτηση img2col (ακριβώς όπως δόθηκε)
+// ==========================================
+
+static void img2col(const float *img, float *col, const conv_op *op) 
+{
+    int iwih = op->in_w * op->in_h; 
+    int kk   = op->kernel_size * op->kernel_size; 
+    int ikk  = op->in_channels * kk; 
+
+    for (int in_c = 0; in_c < op->in_channels; in_c++)
+    {
+        int out_x = 0;
+        for (int st_x = 0; st_x < op->out_w * op->stride; st_x += op->stride, out_x++) 
+        {
+            int out_y = 0;
+            for (int st_y = 0; st_y < op->out_h * op->stride; st_y += op->stride, out_y++)
+            {
+                int patch_idx = out_x * op->out_h + out_y; 
+                int x_col_offset = patch_idx * ikk + in_c * kk; 
+
+                for (int j = 0; j < op->kernel_size; j++)
+                {
+                    for (int i = 0; i < op->kernel_size; i++)
+                    {
+                        if (st_x + i < op->in_w && st_y + j < op->in_h)
+                        {
+                            int input_offset = (st_x + i) + (st_y + j) * op->in_w + in_c * iwih;
+                            col[x_col_offset] = img[input_offset];
+                        }
+                        else
+                        {
+                            col[x_col_offset] = 0.0f;
+                        }
+                        x_col_offset++;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 4. Main Πρόγραμμα
+// ==========================================
+
+int main(int argc, char *argv[]) {
+    // Pass "-t" to run in test mode: uses a tiny 4x4 1-channel image
+    // with values 1..16 instead of loading from disk.
+    int test_mode = 0;
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "-t") == 0) test_mode = 1;
+
+    image img;
+    int kernel_size = test_mode ? 2 : 3, stride = 1;
+
+    if (test_mode) {
+        // ---- TEST MODE: 4x4, 1 channel, values 1..16 ----
+        int target_w = 4, target_h = 4, target_c = 1;
+        make_image(&img, target_w, target_h, target_c);
+        for (int i = 0; i < target_w * target_h * target_c; i++)
+            img.data[i] = (float)(i + 1);
+
+        fprintf(stderr, "\n=== TEST MODE: 4x4 image, 1 channel, values 1..16 ===\n");
+        fprintf(stderr, "Input image (row-major, channel 0):\n");
+        for (int y = 0; y < target_h; y++) {
+            for (int x = 0; x < target_w; x++)
+                fprintf(stderr, "%5.1f ", img.data[y * target_w + x]);
+            fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "kernel=%d  stride=%d  out_w=%d  out_h=%d\n\n",
+                kernel_size, stride,
+                (target_w - kernel_size) / stride + 1,
+                (target_h - kernel_size) / stride + 1);
+    } else {
+        // ---- NORMAL MODE: load real image from disk ----
+        char *image_path = "/home/stavros/scripts/cifar10_images/cat/train_batch_2_04269.jpg";
+        int target_w = 32, target_h = 32, target_c = 3;
+        img = load_image(image_path, target_w, target_h, target_c, 0);
+    }
+
+    // Προετοιμασία struct
+    conv_op op;
+    memset(&op, 0, sizeof(conv_op));
+    op.in_w  = img.w;  op.in_h  = img.h;  op.in_channels = img.c;
+    op.kernel_size = kernel_size; op.stride = stride;
+    op.out_w = (op.in_w - op.kernel_size) / op.stride + 1;
+    op.out_h = (op.in_h - op.kernel_size) / op.stride + 1;
+
+    int total_patches  = op.out_w * op.out_h;
+    int patch_elements = op.in_channels * op.kernel_size * op.kernel_size;
+
+    float *col_matrix = (float *)malloc(total_patches * patch_elements * sizeof(float));
+
+    // Εκτέλεση της im2col
+    img2col(img.data, col_matrix, &op);
+
+    if (test_mode) {
+        // Pretty-print: one row per patch (total_patches rows x patch_elements cols)
+        fprintf(stderr, "im2col output (%d patches x %d elements per patch):\n",
+                total_patches, patch_elements);
+        fprintf(stderr, "(each row = one patch, flattened kernel window)\n");
+        for (int p = 0; p < total_patches; p++) {
+            fprintf(stderr, "Patch %d: ", p);
+            for (int e = 0; e < patch_elements; e++)
+                fprintf(stderr, "%5.1f ", col_matrix[p * patch_elements + e]);
+            fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "\n");
+    }
+
+    // Εκτύπωση ΟΛΩΝ των τιμών (για σύγκριση με Python)
+    for (int i = 0; i < total_patches * patch_elements; i++)
+        printf("%.6f\n", col_matrix[i]);
+
+    free_image(&img);
+    free(col_matrix);
+
+    return 0;
+}

@@ -42,7 +42,7 @@ static int metrics_totLabel[OUT_LAYER];
 static int metrics_TP[OUT_LAYER];
 
 
-static float act_fc1[ALEXNET_STATIC_MAX_BATCH * FC6_LAYER];
+static float act_fc1[ALEXNET_STATIC_MAX_BATCH * FC_OUTPUT_UNITS];
 
 static void zero_f32(float *buf, int n)
 {
@@ -58,8 +58,8 @@ static int verify_weight_array_shapes(void)
 {
     size_t got_w = sizeof(fc1_weights_32) / sizeof(fc1_weights_32[0]);
     size_t got_b = sizeof(fc1_bias_32) / sizeof(fc1_bias_32[0]);
-    size_t exp_w = (size_t)FC6_LAYER * (size_t)(C5_CHANNELS * POOLING5_L * POOLING5_L);
-    size_t exp_b = (size_t)FC6_LAYER;
+    size_t exp_w = (size_t)FC_INPUT_UNITS * (size_t)FC_OUTPUT_UNITS;
+    size_t exp_b = (size_t)FC_OUTPUT_UNITS;
     return (got_w == exp_w) && (got_b == exp_b);
 }
 
@@ -346,8 +346,8 @@ void setup_alexnet(alexnet *net, short batchsize)
     printf_("batchsize in setup\n");
     net->fc1.batchsize   = batchsize;
 
-    net->fc1.in_units = 2048;
-    net->fc1.out_units = FC6_LAYER;
+    net->fc1.in_units = FC_INPUT_UNITS;
+    net->fc1.out_units = FC_OUTPUT_UNITS;
     net->fc1.layer_id = 1;
     
     alexnet_set_all_trainable(net, 1);
@@ -369,9 +369,9 @@ void alexnet_init_weights(alexnet *net)
 #endif
 
     // initialize weights for this network
-    gauss_initialization(net->fc1.weights, C5_CHANNELS*FC6_LAYER*POOLING5_L*POOLING5_L, net->fc1.in_units, net->fc1.out_units);
+    gauss_initialization(net->fc1.weights, FC_INPUT_UNITS*FC_OUTPUT_UNITS, net->fc1.in_units, net->fc1.out_units);
 
-    for(int i=0; i<FC6_LAYER; i++)
+    for(int i=0; i<FC_OUTPUT_UNITS; i++)
         net->fc1.bias[i] = 1;
 }
 

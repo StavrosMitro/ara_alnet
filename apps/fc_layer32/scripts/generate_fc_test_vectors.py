@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-INPUTS = 2048
-OUTPUTS = 512
+DEFAULT_INPUTS = 2048
+DEFAULT_OUTPUTS = 512
 DEFAULT_SAMPLES = 4
 
 
@@ -26,11 +26,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate FC(2048->512) synthetic vectors for bare-metal tests (fc_layer32)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="Number of samples to generate")
+    parser.add_argument("--inputs", type=int, default=DEFAULT_INPUTS, help="FC layer input units (IN)")
+    parser.add_argument("--outputs", type=int, default=DEFAULT_OUTPUTS, help="FC layer output units (OUT)")
     parser.add_argument("--out-dir", default="generated_data", help="Output directory for binary files")
     parser.add_argument("--weights-c", default="kernel/weights.c", help="Path to generated weights.c")
     args = parser.parse_args()
 
     samples = args.samples
+    INPUTS = args.inputs
+    OUTPUTS = args.outputs
     np.random.seed(args.seed)
 
     x = np.random.uniform(-1.0, 1.0, size=(samples, INPUTS)).astype(np.float32)

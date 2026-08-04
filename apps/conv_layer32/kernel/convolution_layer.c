@@ -32,8 +32,14 @@ static int total_gather_elements = 0;
 
 static inline void memset_vectorized_zero_f32(float *dst, size_t n_elements) {
     // 1. Προετοιμασία: Γεμίζουμε 8 Vector Registers (m8) με μηδενικά
-    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
-    asm volatile("vmv.v.i v16, 0"); 
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the caller's vl and only
+    // changes vtype -- it does NOT select VLMAX. The splat then fills just those
+    // lanes while the drain loop below stores at vl = min(n, VLMAX), writing the
+    // untouched lanes out as GARBAGE instead of zeros. rd != x0 with rs1 = x0
+    // requests AVL = ~0 -> vl = VLMAX, so the whole register group is zeroed.
+    size_t vlmax_z;
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_z));
+    asm volatile("vmv.v.i v16, 0");
 
     // 2. Εκτέλεση: Αδειάζουμε τα μηδενικά στη μνήμη με μέγιστο bandwidth
     while (n_elements > 0) {
@@ -75,8 +81,14 @@ static void pad_tensor_vectorized(float *dst, const float *src, int batch, int c
     float *dst_zero = dst;
     
     // Βάζουμε 0 σε όλους τους lanes του τεράστιου καταχωρητή v8 (m8)
-    asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
-    asm volatile("vmv.v.i v8, 0"); 
+    // `vsetvli zero, zero` (rd = x0 AND rs1 = x0) KEEPS the caller's vl and only
+    // changes vtype -- it does NOT select VLMAX. The splat then fills just those
+    // lanes while the drain loop below stores at vl = min(n, VLMAX), writing the
+    // untouched lanes out as GARBAGE instead of zeros. rd != x0 with rs1 = x0
+    // requests AVL = ~0 -> vl = VLMAX, so the whole register group is zeroed.
+    size_t vlmax_p;
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_p));
+    asm volatile("vmv.v.i v8, 0");
 
     while (n_zero > 0) {
         size_t vl;
@@ -189,7 +201,10 @@ static void img2col_vectorized(const float *img, float *col)
 // =========================================================================
 // Precompute img2col Offsets - Called ONCE before training
 // =========================================================================
-void precompute_img2col_offsets_static(const conv_op *op)
+// Returns the cycles spent in the actual offset generation only. The DEBUG
+// printf_ calls above the timer are excluded: in Spike each character is a
+// blocking HTIF syscall (~5000 cyc/char), which otherwise dwarfs the real work.
+int64_t precompute_img2col_offsets_static(const conv_op *op)
 {
     int iwih = op->in_w * op->in_h;
     int kk   = op->kernel_size * op->kernel_size; // π.χ. 9
@@ -209,6 +224,8 @@ void precompute_img2col_offsets_static(const conv_op *op)
                 total_gather_elements, MAX_GATHER_ELEMENTS);
         exit(1); 
     }
+
+    int64_t _cyc0 = get_cycle_count();
 
     // --- Vectorized 3x3 Pattern Precomputation ---
     uint32_t patch_pattern[9]; // Υποθέτουμε max kernel 3x3
@@ -240,10 +257,12 @@ void precompute_img2col_offsets_static(const conv_op *op)
                 // Αποθήκευση των offsets
                 asm volatile("vse32.v v16, (%0)" :: "r"(out_ptr));
                 
-                out_ptr += kk; 
+                out_ptr += kk;
             }
         }
     }
+
+    return get_cycle_count() - _cyc0;
 }
 
 #ifndef MIN
@@ -336,31 +355,56 @@ void verify_img2col_implementations(const conv_op *op, const float *test_input)
     printf_("==========================================================\n\n");
 }
 
+// Vectorized: the scalar loop read weights[idx*OC + oc] for idx = 0..n-1, which
+// is exactly a strided load from (weights + oc) with stride OC*sizeof(float).
+// Mirrors conv_layer's pack_conv3x3_filter. Was ~94 cycles scalar.
 static void pack_conv3x3_filter(const conv_op *op, int oc, float *dst)
 {
-    int idx = 0;
-    for (int ic = 0; ic < op->in_channels; ic++) {
-        for (int ky = 0; ky < op->kernel_size; ky++) {
-            for (int kx = 0; kx < op->kernel_size; kx++) {
-                int w_idx = (ic * op->kernel_size * op->kernel_size + ky * op->kernel_size + kx) * op->out_channels + oc;
-                dst[idx++] = op->weights[w_idx];
-            }
-        }
+    int n = op->in_channels * op->kernel_size * op->kernel_size;
+    const float *src = op->weights + oc;
+    int stride_bytes = op->out_channels * (int)sizeof(float);
+
+    while (n > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+        asm volatile("vlse32.v v8, (%0), %1" :: "r"(src), "r"(stride_bytes));
+        asm volatile("vse32.v v8, (%0)" :: "r"(dst));
+        src += (int)vl * op->out_channels;
+        dst += vl;
+        n   -= (int)vl;
     }
 }
 
+// Vectorized along the KERNEL axis (kk elements), not out_channels.
+//
+// Scalar form: dst[oc*kk + j] = weights[(ic*kk + flip(j))*OC + oc], and for a
+// square kernel flip(j) = (k-1-ky)*k + (k-1-kx) = kk-1-j. Substituting:
+//     dst[oc*kk + j] = weights[(ic*kk + kk-1)*OC + oc - j*OC]
+// i.e. for a fixed oc the source walks BACKWARDS with byte stride -OC*4, which
+// vlse32 handles directly (RVV strides are signed). So one strided load of kk
+// elements + one unit-stride store per oc.
+//
+// Vectorizing over out_channels instead would run at vl=1 when OC==1 (the common
+// case here) and is slower than the scalar loop -- measured 473 -> 573 cycles.
 static void pack_conv3x3_filter_rot180_dx(const conv_op *op, int ic, float *dst)
 {
-    int k = op->kernel_size;
-    int idx = 0;
-    for (int oc = 0; oc < op->out_channels; oc++) {
-        for (int ky = 0; ky < k; ky++) {
-            for (int kx = 0; kx < k; kx++) {
-                int src_ky = k - 1 - ky;
-                int src_kx = k - 1 - kx;
-                int w_idx = (ic * k * k + src_ky * k + src_kx) * op->out_channels + oc;
-                dst[idx++] = op->weights[w_idx];
-            }
+    int k  = op->kernel_size;
+    int kk = k * k;
+    int OC = op->out_channels;
+    int stride_bytes = -OC * (int)sizeof(float);   // negative: walk the kernel backwards
+
+    for (int oc = 0; oc < OC; oc++) {
+        const float *src = op->weights + (ic * kk + kk - 1) * OC + oc;
+        float *d = dst + oc * kk;
+        int n = kk;
+        while (n > 0) {
+            size_t vl;
+            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+            asm volatile("vlse32.v v8, (%0), %1" :: "r"(src), "r"(stride_bytes));
+            asm volatile("vse32.v v8, (%0)" :: "r"(d));
+            src -= (int)vl * OC;
+            d   += vl;
+            n   -= (int)vl;
         }
     }
 }
@@ -378,7 +422,20 @@ static int conv_can_use_3x3_dx(const conv_op *op)
 {
     if (op->kernel_size != 3 || op->stride != 1)
         return 0;
-    if (op->in_w != op->out_w + 2 || op->in_h != op->out_h + 2)
+    // Two layouts are supported:
+    //   PRE-PADDED  (in == out + 2): what alexnet_train() switches conv1 to, so
+    //               the kernel consumes train_input_pad_buf directly.
+    //   SAME/UNPADDED (in == out, padding == (k-1)/2): the logical shape
+    //               setup_alexnet() leaves in place, and what a network that
+    //               chains conv -> bn -> conv (e.g. vggnet) actually stores.
+    // Only the first was accepted before, so under the logical geometry this
+    // returned 0 and the backward silently fell through to col2img -- which is
+    // itself written for the pre-padded layout and scatters off the end of every
+    // row. Accepting both keeps the two representations interchangeable.
+    const int prepadded = (op->in_w == op->out_w + 2 && op->in_h == op->out_h + 2);
+    const int same_unpadded = (op->in_w == op->out_w && op->in_h == op->out_h &&
+                               op->padding == (op->kernel_size - 1) / 2);
+    if (!prepadded && !same_unpadded)
         return 0;
     if ((size_t)op->out_channels * 9 > (size_t)CONV_MAX_IKK)
         return 0;
@@ -402,10 +459,17 @@ static void conv_op_forward_3x3_ara(conv_op *op)
                                op->out_h, op->out_w, in_channels, op->bias[oc]);
         }
 
-        if (op->input_col != NULL) {
-            float *x_col = conv_forward_xcol_ptr(op, (short)b);
-            img2col(input_b, x_col, op);
-        }
+        // DISABLED: dead work that made the forward look ~11x slower than the
+        // FP16 forward. This ran the SCALAR img2col (~15k instrs for 64x9=576
+        // elements) inside the timed forward, but conv_op_backward_full_profile
+        // re-sets input_col and recomputes x_col with the VECTORIZED
+        // img2col_vectorized() before anything reads it -- so the result here was
+        // always overwritten. conv_layer's FP16 forward has no such block, which
+        // is why forward was 1440 (f16) vs 16728 (f32) cycles at W=64.
+        // if (op->input_col != NULL) {
+        //     float *x_col = conv_forward_xcol_ptr(op, (short)b);
+        //     img2col(input_b, x_col, op);
+        // }
     }
 }
 
@@ -422,16 +486,24 @@ static void pad_channels(float *dst, const float *src, int channels, int in_h, i
         const float *src_c = src + c * in_plane;
         float *dst_c = dst + c * out_plane + pad * out_w + pad;
         for (int y = 0; y < in_h; y++) {
-            memcpy(dst_c + y * out_w, src_c + y * in_w, (size_t)in_w * sizeof(float));
+            // Vectorized (elements, not bytes). libc memcpy needs dest|src|len ALL
+            // 8-byte aligned or it drops to a byte-at-a-time loop -- and dst_c is
+            // offset by (pad*out_w + pad) floats, an odd float offset when pad=1,
+            // so it took the byte path on every row. This mirrors pad_channels_f16.
+            memcpy_vectorized_f32(dst_c + y * out_w, src_c + y * in_w, (size_t)in_w);
         }
     }
 }
 
 static void conv_op_backward_input_3x3_ara(conv_op *op)
 {
-    int pad = (op->in_w - op->out_w) / 2;
+    // Padding applied to d_output before the full (rot180) convolution:
+    //   pre-padded layout (in == out + 2) -> (in_w - out_w)/2 == 1
+    //   SAME/unpadded layout (in == out)  -> (kernel_size - 1)/2
+    int pad = (op->in_w > op->out_w) ? (op->in_w - op->out_w) / 2
+                                     : (op->kernel_size - 1) / 2;
     int out_plane = op->out_w * op->out_h;
-    int padded_plane = op->in_w * op->in_h;
+    int padded_plane = (op->out_h + 2 * pad) * (op->out_w + 2 * pad);
 
     if (pad <= 0) {
         printf_("Error: invalid padding for 3x3 d_input\n");
@@ -460,7 +532,18 @@ static void conv_op_backward_input_3x3_ara(conv_op *op)
         }
 
         float *d_in_b = op->d_input + b * op->in_units;
-        pad_channels(d_in_b, d_input_tmp, op->in_channels, op->out_h, op->out_w, pad);
+        if (op->in_w == op->out_w && op->in_h == op->out_h) {
+            // SAME/unpadded layout: the full-convolution result above already IS
+            // d_input at the input's spatial size, so copy it straight through.
+            // Re-padding here (correct for the pre-padded layout, where in_units
+            // is itself padded) would write in_channels*(out_h+2)*(out_w+2) into
+            // a buffer holding only in_channels*out_h*out_w, and hand the
+            // previous layer a padded map it reads as unpadded.
+            memcpy_vectorized_f32(d_in_b, d_input_tmp,
+                                  (size_t)op->in_channels * (size_t)out_plane);
+        } else {
+            pad_channels(d_in_b, d_input_tmp, op->in_channels, op->out_h, op->out_w, pad);
+        }
     }
 }
 
@@ -584,13 +667,19 @@ void conv_op_forward(conv_op *op)
             exit(1);
         }
         op->input_col = conv5_input_col_full;
-        memset(op->input_col, 0,
+        // NOTE: element count, NOT bytes -- do not re-add * sizeof(float).
+        // The libc memset in common/string.c drops to a BYTE loop unless dest is
+        // 8-byte aligned; conv5_input_col_full is only 4-byte aligned, so zeroing
+        // 2304 bytes cost 9249 cycles and dominated the entire forward pass
+        // (the conv kernel itself is 128). vse32 needs only 4-byte alignment, so
+        // this has no such cliff.
+        memset_vectorized_zero_f32(op->input_col,
                (size_t)op->batchsize * (size_t)(op->in_channels * op->kernel_size * op->kernel_size) *
-               (size_t)(op->out_w * op->out_h) * sizeof(float));
+               (size_t)(op->out_w * op->out_h));
     } else {
         op->input_col = NULL;
     }
-    
+
     conv_op_forward_3x3_ara(op);
     return;
 
@@ -633,8 +722,17 @@ static void col2img(const float *col, float *img, const conv_op *op)
                 {
                     for (int i = 0; i < op->kernel_size; i++)
                     {
-                        int input_offset = (st_x + i) + (st_y + j) * op->in_w + in_c * iwih;
-                        img[input_offset] += col[x_col_offset];
+                        // Undo the centred padding and drop taps outside the map.
+                        // Under the PRE-PADDED layout padding == 0 and in_w ==
+                        // out_w + 2, so this reduces exactly to the old
+                        // (st_x + i) + (st_y + j) * in_w form. Under the
+                        // SAME/unpadded layout that old form indexed st_x + i up
+                        // to out_w + 1 with a row stride of in_w == out_w,
+                        // scattering off the end of every row and past the plane.
+                        int ix = st_x + i - op->padding;
+                        int iy = st_y + j - op->padding;
+                        if (ix >= 0 && ix < op->in_w && iy >= 0 && iy < op->in_h)
+                            img[ix + iy * op->in_w + in_c * iwih] += col[x_col_offset];
                         x_col_offset++;
                     }
                 }
@@ -677,15 +775,20 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
     for (int p = 0; p < op->batchsize; p++)
     {
         t0 = get_cycle_count();
-        float *x_col = conv_forward_xcol_ptr(op, (short)p);
-        // Use GATHER-based vectorized img2col if offsets precomputed, else fallback
-        if (total_gather_elements > 0) {
-            // printf_("vectorized im2col (gather_elements=%d, layer_id=%d)\n", total_gather_elements, op->layer_id);
-            img2col_vectorized(op->input + p * op->in_units, x_col);
-        } else {
-            printf_("scalar im2col (gather_elements=%d, layer_id=%d)\n", total_gather_elements, op->layer_id);
-            img2col(op->input + p * op->in_units, x_col, op);
-        }
+        // DISABLED: dead work. With the d_weights GEMM below commented out,
+        // nothing reads x_col. Kept in lockstep with conv_layer, where the FP16
+        // equivalent (img2col_vectorized_f16) is disabled because its vluxei32.v
+        // gather at e16/m4 hangs on Ara RTL. Leaving this enabled charged FP32 an
+        // extra ~2600 cycles that FP16 was not paying -- an unfair asymmetry.
+        // Re-enable together with the GEMM.
+        //
+        // float *x_col = conv_forward_xcol_ptr(op, (short)p);
+        // if (total_gather_elements > 0) {
+        //     img2col_vectorized(op->input + p * op->in_units, x_col);
+        // } else {
+        //     printf_("scalar im2col (gather_elements=%d, layer_id=%d)\n", total_gather_elements, op->layer_id);
+        //     img2col(op->input + p * op->in_units, x_col, op);
+        // }
 
         if (cycles)
             cycles->d_weights_im2col_cycles += get_cycle_count() - t0;
@@ -693,7 +796,12 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
         memset_vectorized_zero_f32(t_d_weights, (size_t)oc * (size_t)ikk);
 
         t0 = get_cycle_count();
-        matrix_multiply(op->d_output + p * oc * owoh, x_col, t_d_weights, oc, owoh, ikk);
+//                matrix_multiply(op->d_output + p * oc * owoh, x_col, t_d_weights, oc, owoh, ikk);
+
+        // DISABLED: benchmarking the conv kernel, not the weight-gradient GEMM.
+        // t_d_weights stays zeroed by the memset above, so the scatter below
+        // accumulates zeros and d_weights stays 0. Uncomment to restore.
+        // matrix_multiply(op->d_output + p * oc * owoh, x_col, t_d_weights, oc, owoh, ikk);
 
         int stride_bytes = oc * (int)sizeof(float);
         for (int j = 0; j < oc; j++) {
@@ -748,7 +856,13 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
 
     for (int i = 0; i < oc; i++)
     {
-        asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
+        // Zero the WHOLE accumulator group. `vsetvli zero, zero` (rd = x0 AND
+        // rs1 = x0) keeps whatever vl the preceding code left, so the splat
+        // covered only that many lanes while the loop below accumulates into
+        // min(owoh, VLMAX) of them -- any lane in between would carry garbage
+        // straight into d_bias. rd != x0 with rs1 = x0 gives vl = VLMAX.
+        size_t vlmax_acc;
+        asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_acc));
         asm volatile("vmv.v.i v8, 0");
 
         for (int p = 0; p < op->batchsize; p++)
@@ -766,7 +880,12 @@ void conv_op_backward_full_profile(conv_op *op, conv_backward_cycle_breakdown *c
         }
 
         float tmp;
-        asm volatile("vsetvli zero, zero, e32, m8, ta, ma");
+        // Reduce the WHOLE accumulator group too. Keeping the loop's trailing vl
+        // here silently drops every lane above it, which for owoh > VLMAX (not a
+        // multiple) loses most of the sum. The lanes the loop never touched were
+        // zeroed above, so reducing at VLMAX is correct for any owoh.
+        size_t vlmax_red;
+        asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax_red));
         asm volatile("vmv.v.i v0, 0");
         asm volatile("vfredsum.vs v0, v8, v0");
         asm volatile("vfmv.f.s %0, v0" : "=f"(tmp));

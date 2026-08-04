@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-INPUTS = 2048
-OUTPUTS = 512
+DEFAULT_INPUTS = 128
+DEFAULT_OUTPUTS = 128
 DEFAULT_SAMPLES = 4
 
 
@@ -23,14 +23,25 @@ def write_c_array_f16(f, name: str, arr: np.ndarray, per_line: int = 8) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate FC(2048->512) synthetic vectors for bare-metal tests (fc_layer32)")
+    parser = argparse.ArgumentParser(
+        description="Generate FC synthetic vectors for bare-metal tests (fc_layer16only, pure FP16)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES, help="Number of samples to generate")
+    # --inputs/--outputs exist so the Makefile can drive this generator with the
+    # SAME arguments it passes to fc_layer32's. They were hardcoded here, which
+    # meant the two apps' data could only be kept in sync by hand.
+    parser.add_argument("--inputs", type=int, default=DEFAULT_INPUTS, help="FC layer input units (IN)")
+    parser.add_argument("--outputs", type=int, default=DEFAULT_OUTPUTS, help="FC layer output units (OUT)")
     parser.add_argument("--out-dir", default="generated_data", help="Output directory for binary files")
     parser.add_argument("--weights-c", default="kernel/weights.c", help="Path to generated weights.c")
     args = parser.parse_args()
 
     samples = args.samples
+    INPUTS = args.inputs
+    OUTPUTS = args.outputs
+    # Seed and draw order are identical to fc_layer32's generator, so at matching
+    # --samples/--inputs/--outputs every array here is the exact fp16 rounding of
+    # the FP32 app's array. Do not reorder the np.random calls below.
     np.random.seed(args.seed)
 
     x = np.random.uniform(-1.0, 1.0, size=(samples, INPUTS)).astype(np.float16)

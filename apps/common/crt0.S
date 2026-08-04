@@ -41,6 +41,42 @@ _start:
     /* reset vector */
     j reset_vector
 reset_vector:
+#ifdef FPGA
+    // ---- STALE-CODE GUARD (must be FIRST, and byte-identical in every app) --
+    // The ILA proved (3 captures, 2026-07-28) that after a HUNG run the next
+    // program can boot into the PREVIOUS program's code: the loader writes DDR
+    // through the PS, invisible to the PL-side caches, and a cache that
+    // survives the gpio412 reset (LLC tag init and/or CVA6 I$ valid bits on
+    // FPGA) keeps serving the old lines. The shared crt0 prefix executes the
+    // same either way -- the first program-SPECIFIC bytes are the `la gp` and
+    // `la t0, main` immediates, so a stale line there vectors execution into
+    // the OLD program's main (observed: vfcount run executing fmatmul@0x956).
+    // Therefore: everything from here down to the post-flush refetch must stay
+    // BYTE-IDENTICAL across programs, and main/gp must only be materialized
+    // AFTER this block.
+    fence.i                     // invalidate CVA6 I$: refetch all .text
+#ifndef NO_LLC
+    li   t0, 0x03001000         // axi_llc cfg (uncached reg bus: safe while
+    lw   t4, 0x28(t0)           //   the LLC AXI port is isolated during flush)
+    li   t1, 1
+    sll  t1, t1, t4
+    addi t1, t1, -1             // mask = (1<<ways)-1
+    sw   t1, 0x8(t0)            // CFG_FLUSH_LOW  = mask
+    sw   x0, 0xc(t0)            // CFG_FLUSH_HIGH = 0
+    li   t2, 1
+    sw   t2, 0x10(t0)           // COMMIT -> writeback+INVALIDATE every way
+1:  lw   t3, 0x8(t0)            // poll CFG_FLUSH (hardware clears when done;
+    bnez t3, 1b                 //   FLUSHED@0x18 is a live bitmap, NOT a flag)
+#endif
+    fence.i                     // refetch: from here on all code is FRESH
+    // gp was set at _start possibly from a STALE line -- redo it now that
+    // fetches are guaranteed fresh.
+    .option push
+    .option norelax
+    2:auipc gp, %pcrel_hi(__global_pointer$)
+      addi  gp, gp, %pcrel_lo(2b)
+    .option pop
+#endif
     li      x1, 0
     li      x4, 0
     li      x5, 0
@@ -150,6 +186,33 @@ trap_vector:
     jr t5
 1:
 #endif
+    // ---- TRAP DIAGNOSTIC BLOCK ----------------------------------------
+    // Record the trap unambiguously, FIRST, before anything else can go wrong.
+    // Why the old handler was not enough: it only captured mcause and wrote it
+    // to eoc_address_reg -- the same mailbox as a normal exit code, so a trap
+    // returning 0 was indistinguishable from a clean exit, and the faulting PC
+    // was lost entirely.
+    // These go to dedicated addresses so (a) devmem can read them after the
+    // _eoc flush, and (b) the ILA's GATED dbg_cva6_last_write shows
+    // 0x50000050 -- a unique signature meaning "a trap happened" -- even when
+    // _eoc is never reached and nothing is ever flushed to DDR.
+    //   0x50000040 mcause[31:0]   0x50000044 mcause[63:32] (bit31 = interrupt)
+    //   0x50000048 mepc[31:0]     (the faulting PC)
+    //   0x5000004C mtval[31:0]    (faulting address / instruction)
+    //   0x50000050 0x7A7A7A7A     (TRAP flag - watch for this on the ILA)
+    li   t6, 0x50000040
+    csrr t5, mcause
+    sw   t5, 0(t6)
+    srli t5, t5, 32
+    sw   t5, 4(t6)
+    csrr t5, mepc
+    sw   t5, 8(t6)
+    csrr t5, mtval
+    sw   t5, 12(t6)
+    li   t5, 0x7A7A7A7A
+    sw   t5, 16(t6)
+    fence rw, rw
+
     csrr a0, mcause
     j _fail
 
@@ -157,7 +220,13 @@ trap_vector:
 _eoc:
     la t0, eoc_address_reg
     sd a0, 0(t0)                  // publish return code (lands in LLC when cached)
-#ifdef FPGA
+// NO_LLC builds target the LlcNotBypass=0 bitstream, where cheshire_soc.sv's
+// `if (Cfg.LlcOutConnect && Cfg.LlcNotBypass) : gen_llc` never instantiates
+// axi_llc, so the config registers at 0x0300_1000 are UNMAPPED. Reading
+// SET_ASSO there returns garbage and the CFG_FLUSH poll below spins forever --
+// a hang that proves nothing about the design under test. There is also nothing
+// to flush: with no write-back LLC the stores already went straight to DDR.
+#if defined(FPGA) && !defined(NO_LLC)
     // FPGA: the LLC is write-back (LlcNotBypass=1). Flush ALL ways so the return
     // code, the DDR console buffer, and any results are written back to PS-DDR,
     // where the ARM host reads them via /dev/mem. axi_llc regs @ AmLlc=0x0300_1000:
@@ -172,8 +241,18 @@ _eoc:
     sw   x0, 0xc(t0)            // CFG_FLUSH_HIGH = 0
     li   t2, 1
     sw   t2, 0x10(t0)           // COMMIT_CFG.commit = 1  -> start flush
-1:  lw   t3, 0x18(t0)           // poll FLUSHED_LOW
-    bne  t3, t1, 1b            // wait until all requested ways are written back
+    // Poll CFG_FLUSH (0x8), NOT FLUSHED (0x18).
+    // FLUSHED is a live state bitmap ("ways with no valid tags"), not a
+    // completion flag: axi_llc_config.sv FsmEndFlush overwrites it with
+    // cfg_spm (=0 here) when the LAST way finishes, so for 8 ways it walks
+    // 0x01,0x03,...,0x7f,0 and NEVER equals the 0xff mask -> the old
+    // `bne t3,t1,1b` spun forever even though the flush had completed.
+    // CFG_FLUSH is the real completion signal: software writes it in FsmIdle
+    // (cfg_flush_en=0 there), hardware holds it during the flush, and clears
+    // it to 0 in FsmEndFlush/FsmInitFlush when the FSM returns to idle.
+    // COMMIT_CFG cannot be used -- it self-clears when the flush STARTS.
+1:  lw   t3, 0x8(t0)            // poll CFG_FLUSH_LOW
+    bnez t3, 1b                 // hardware clears it when the flush completes
 #endif
 2:  j    2b                    // halt; everything is now resident in PS-DDR
 

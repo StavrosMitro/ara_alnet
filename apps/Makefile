@@ -117,15 +117,76 @@ bin/fc_layer.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer
 fc_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
 # ---------------------------------------------------------------------------
+# FC BENCHMARK PARITY KNOBS
+#
+# fc_layer32 (FP32) and fc_layer16only (FP16) are a precision A/B pair: for the
+# comparison to mean anything they must run the same shape, the same number of
+# steps, and the same data. Both apps derive their per-app knobs from these, so
+# a single override moves both:
+#
+#   make spike-run-fc_layer32      FC_BENCH_BATCHSIZE=8
+#   make spike-run-fc_layer16only  FC_BENCH_BATCHSIZE=8
+#
+# BATCHSIZE was 12 (FP32) vs 4 (FP16) and EPOCHS 1 vs 20. Beyond the obvious
+# step-count skew, batch 12 pads to 16 in fmatmul_row_block() while batch 4 does
+# not -- so the two apps were not even executing the same forward code path.
+# Batch 4 is the padding-free choice for both.
+FC_BENCH_BATCHSIZE ?= 4
+FC_BENCH_EPOCHS    ?= 1
+# 256 (not 128) so BOTH precisions saturate their lanes on the m4 fmatmul path:
+# VLMAX(e16,m4) = 2*VL_bytes, so a width of 256 keeps FP16 100% occupied up to
+# VL=128 B and yields the honest 2:1 strip ratio vs FP32. At 128 the FP16 side
+# idled half its lanes from VL=128 B upward and the measured ratio collapsed
+# toward 1:1. Raise to 512 if you extend the sweep to VL=256 B (that is also
+# FC_MAX_INTERNAL, the ceiling without editing fc_layer.h).
+FC_BENCH_IN_UNITS  ?= 256
+FC_BENCH_OUT_UNITS ?= 256
+FC_BENCH_SEED      ?= 42
+FC_BENCH_LOSS      ?= MSE
+
+# ---------------------------------------------------------------------------
 # fc_layer32: pure FP32 fully-connected layer (mirrors fc_layer semantics)
 # ---------------------------------------------------------------------------
 FC_LAYER32_MODE ?= train
-FC_LAYER32_LOSS ?= MSE
-FC_LAYER32_BATCHSIZE ?= 12
-FC_LAYER32_EPOCHS ?= 1
+FC_LAYER32_LOSS ?= $(FC_BENCH_LOSS)
+FC_LAYER32_BATCHSIZE ?= $(FC_BENCH_BATCHSIZE)
+FC_LAYER32_EPOCHS ?= $(FC_BENCH_EPOCHS)
 FC_LAYER32_INFER_IDX ?= -1
 FC_LAYER32_STATIC_MAX_BATCH ?= $(FC_LAYER32_BATCHSIZE)
 FC_LAYER32_SAMPLES ?= $(FC_LAYER32_BATCHSIZE)
+
+# ---- benchmark data is GENERATED FROM THESE KNOBS ----
+# generated_data/ used to be a checked-in 4-sample blob while FC_LAYER32_BATCHSIZE
+# defaulted to 12. Nothing tied the two together, and train.c's batch fetch copies
+# batchsize*FC_INPUT_UNITS floats regardless of FC_TOTAL_SAMPLES -- so it read
+# 12*128 = 1536 floats out of a 512-float array, ran off inputs.bin into
+# targets.bin/labels.bin, and reported an inf loss on the very first forward
+# (before any weight update). Regenerating from the same knobs that size the run
+# makes that mismatch impossible rather than merely detectable.
+# These reproduce the previously checked-in blobs bit-for-bit at the defaults.
+FC_LAYER32_IN_UNITS  ?= $(FC_BENCH_IN_UNITS)
+FC_LAYER32_OUT_UNITS ?= $(FC_BENCH_OUT_UNITS)
+FC_LAYER32_SEED      ?= $(FC_BENCH_SEED)
+
+FC_LAYER32_DATA_STAMP  := fc_layer32/generated_data/.params
+FC_LAYER32_DATA_PARAMS := samples=$(FC_LAYER32_SAMPLES) in=$(FC_LAYER32_IN_UNITS) out=$(FC_LAYER32_OUT_UNITS) seed=$(FC_LAYER32_SEED)
+
+# The recipe runs every build but regenerates -- and touches the stamp -- ONLY
+# when the parameter set actually changed, so dependents rebuild only then
+# instead of on every invocation.
+.PHONY: fc_layer32-data-force
+fc_layer32-data-force:
+
+$(FC_LAYER32_DATA_STAMP): fc_layer32-data-force
+	@mkdir -p $(@D)
+	@if [ "$$(cat $@ 2>/dev/null)" != "$(FC_LAYER32_DATA_PARAMS)" ]; then \
+	    echo "  GEN     fc_layer32/generated_data ($(FC_LAYER32_DATA_PARAMS))"; \
+	    ( cd fc_layer32 && $(PYTHON) scripts/generate_fc_test_vectors.py \
+	        --samples $(FC_LAYER32_SAMPLES) --inputs $(FC_LAYER32_IN_UNITS) \
+	        --outputs $(FC_LAYER32_OUT_UNITS) --seed $(FC_LAYER32_SEED) \
+	        --out-dir generated_data --weights-c kernel/weights.c ) > /dev/null; \
+	    echo "$(FC_LAYER32_DATA_PARAMS)" > $@; \
+	fi
 
 ifeq ($(FC_LAYER32_MODE),train)
 FC_LAYER32_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER32_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER32_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER32_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER32_SAMPLES)
@@ -143,7 +204,13 @@ else
 $(error Unsupported FC_LAYER32_LOSS='$(FC_LAYER32_LOSS)'. Use MSE or CEL)
 endif
 
-FC_LAYER32_DEFINES := $(FC_LAYER32_MODE_DEFINES) $(FC_LAYER32_LOSS_DEFINES)
+# Dimensions must reach the COMPILER too, not just the data generator: the app
+# sizes its static buffers and the op descriptor from these macros. Passing them
+# only to the generator would regenerate data at the new shape while the binary
+# stayed at 128 -- a silent buffer overrun.
+FC_LAYER32_DIM_DEFINES := -DFC_INPUT_UNITS=$(FC_LAYER32_IN_UNITS) -DFC_OUTPUT_UNITS=$(FC_LAYER32_OUT_UNITS)
+
+FC_LAYER32_DEFINES := $(FC_LAYER32_MODE_DEFINES) $(FC_LAYER32_LOSS_DEFINES) $(FC_LAYER32_DIM_DEFINES)
 
 bin/fc_layer32:  $(APPS_DIR)/Makefile
 bin/fc_layer32%: $(APPS_DIR)/Makefile
@@ -159,6 +226,17 @@ bin/fc_layer32:  RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer32
 bin/fc_layer32%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer32
 
 fc_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# Rebuild fc_layer32 objects when a Makefile knob changes, and when the generated
+# data changes. Only `bin/fc_layer32%` depended on the Makefile before, which is
+# the LINK step -- so changing FC_LAYER32_BATCHSIZE relinked stale objects still
+# compiled with the old -DALEXNET_BATCHSIZE, and main.c kept printing the
+# previous batch size. Same explicit-list form as conv_layer32 below (a
+# recipe-less pattern rule would be a silent no-op here).
+FC_LAYER32_SRCS := $(call find_app_sources,fc_layer32)
+$(addsuffix .o,       $(FC_LAYER32_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER32_DATA_STAMP)
+$(addsuffix .o.spike, $(FC_LAYER32_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER32_DATA_STAMP)
+$(addsuffix .o.fpga,  $(FC_LAYER32_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER32_DATA_STAMP)
 
 # ---------------------------------------------------------------------------
 # fc_layer_test: FP16(mixed) vs FP32 equivalence harness. Links the 3 kernels
@@ -188,12 +266,47 @@ fc_layer_test/main.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -
 # fc_layer16only: pure FP16 fully-connected layer
 # ---------------------------------------------------------------------------
 FC_LAYER16ONLY_MODE ?= train
-FC_LAYER16ONLY_LOSS ?= MSE
-FC_LAYER16ONLY_BATCHSIZE ?= 16
-FC_LAYER16ONLY_EPOCHS ?= 20
+FC_LAYER16ONLY_LOSS ?= $(FC_BENCH_LOSS)
+FC_LAYER16ONLY_BATCHSIZE ?= $(FC_BENCH_BATCHSIZE)
+FC_LAYER16ONLY_EPOCHS ?= $(FC_BENCH_EPOCHS)
 FC_LAYER16ONLY_INFER_IDX ?= -1
 FC_LAYER16ONLY_STATIC_MAX_BATCH ?= $(FC_LAYER16ONLY_BATCHSIZE)
 FC_LAYER16ONLY_SAMPLES ?= $(FC_LAYER16ONLY_BATCHSIZE)
+# Learning rate and momentum, for sweeping the FP16 update-swamping threshold:
+#   make spike-run-fc_layer16only FC_LAYER16ONLY_LR=0.01 FC_LAYER16ONLY_MOMENTUM=0
+# NOTE: the default MUST equal fc_layer32's LEARNING_RATE (0.00001f, set in
+# fc_layer32/kernel/train.c) or the two apps take differently-sized steps.
+FC_LAYER16ONLY_LR ?= 0.00001f
+FC_LAYER16ONLY_MOMENTUM ?= 1
+
+# ---- benchmark data is GENERATED FROM THESE KNOBS (mirrors fc_layer32) ----
+# generated_data/ was a checked-in 4-sample blob with no rule tying it to
+# FC_LAYER16ONLY_BATCHSIZE -- exactly the hazard that was already fixed on the
+# fc_layer32 side. Any batch size > 4 would have read off the end of inputs.bin
+# into targets.bin/labels.bin. Generating from the same knobs that size the run
+# makes that impossible, and driving both generators with the same
+# --samples/--inputs/--outputs/--seed keeps the FP16 arrays the exact fp16
+# rounding of the FP32 ones.
+FC_LAYER16ONLY_IN_UNITS  ?= $(FC_BENCH_IN_UNITS)
+FC_LAYER16ONLY_OUT_UNITS ?= $(FC_BENCH_OUT_UNITS)
+FC_LAYER16ONLY_SEED      ?= $(FC_BENCH_SEED)
+
+FC_LAYER16ONLY_DATA_STAMP  := fc_layer16only/generated_data/.params
+FC_LAYER16ONLY_DATA_PARAMS := samples=$(FC_LAYER16ONLY_SAMPLES) in=$(FC_LAYER16ONLY_IN_UNITS) out=$(FC_LAYER16ONLY_OUT_UNITS) seed=$(FC_LAYER16ONLY_SEED)
+
+.PHONY: fc_layer16only-data-force
+fc_layer16only-data-force:
+
+$(FC_LAYER16ONLY_DATA_STAMP): fc_layer16only-data-force
+	@mkdir -p $(@D)
+	@if [ "$$(cat $@ 2>/dev/null)" != "$(FC_LAYER16ONLY_DATA_PARAMS)" ]; then \
+	    echo "  GEN     fc_layer16only/generated_data ($(FC_LAYER16ONLY_DATA_PARAMS))"; \
+	    ( cd fc_layer16only && $(PYTHON) scripts/generate_fc_test_vectors.py \
+	        --samples $(FC_LAYER16ONLY_SAMPLES) --inputs $(FC_LAYER16ONLY_IN_UNITS) \
+	        --outputs $(FC_LAYER16ONLY_OUT_UNITS) --seed $(FC_LAYER16ONLY_SEED) \
+	        --out-dir generated_data --weights-c kernel/weights.c ) > /dev/null; \
+	    echo "$(FC_LAYER16ONLY_DATA_PARAMS)" > $@; \
+	fi
 
 ifeq ($(FC_LAYER16ONLY_MODE),train)
 FC_LAYER16ONLY_MODE_DEFINES := -DALEXNET_MODE_TRAIN -DALEXNET_BATCHSIZE=$(FC_LAYER16ONLY_BATCHSIZE) -DALEXNET_STATIC_MAX_BATCH=$(FC_LAYER16ONLY_STATIC_MAX_BATCH) -DALEXNET_EPOCHS=$(FC_LAYER16ONLY_EPOCHS) -DFC_TOTAL_SAMPLES=$(FC_LAYER16ONLY_SAMPLES)
@@ -211,7 +324,11 @@ else
 $(error Unsupported FC_LAYER16ONLY_LOSS='$(FC_LAYER16ONLY_LOSS)'. Use MSE or CEL)
 endif
 
-FC_LAYER16ONLY_DEFINES := $(FC_LAYER16ONLY_MODE_DEFINES) $(FC_LAYER16ONLY_LOSS_DEFINES)
+FC_LAYER16ONLY_OPT_DEFINES := '-DLEARNING_RATE=((_Float16)$(FC_LAYER16ONLY_LR))' -DALEXNET_USE_MOMENTUM=$(FC_LAYER16ONLY_MOMENTUM)
+
+FC_LAYER16ONLY_DIM_DEFINES := -DFC_INPUT_UNITS=$(FC_LAYER16ONLY_IN_UNITS) -DFC_OUTPUT_UNITS=$(FC_LAYER16ONLY_OUT_UNITS)
+
+FC_LAYER16ONLY_DEFINES := $(FC_LAYER16ONLY_MODE_DEFINES) $(FC_LAYER16ONLY_LOSS_DEFINES) $(FC_LAYER16ONLY_OPT_DEFINES) $(FC_LAYER16ONLY_DIM_DEFINES)
 
 bin/fc_layer16only:  $(APPS_DIR)/Makefile
 bin/fc_layer16only%: $(APPS_DIR)/Makefile
@@ -227,6 +344,19 @@ bin/fc_layer16only:  RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16only
 bin/fc_layer16only%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/fc_layer16only
 
 fc_layer16only/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# Ensure fc_layer16only objects rebuild when Makefile-defined knobs change.
+# Without this, `make spike-run-fc_layer16only FC_LAYER16ONLY_EPOCHS=3` relinks
+# STALE objects and silently runs with the previous epoch count / LR.
+#
+# NB: this must be an explicit target list, not `fc_layer16only/%.c.o.spike: Makefile`.
+# A pattern rule with no recipe does not add prerequisites to the pattern rule in
+# runtime.mk that actually builds the object -- make just ignores it. (The
+# conv_layer/conv_layer32 guards further down are written that way and are no-ops.)
+FC_LAYER16ONLY_SRCS := $(call find_app_sources,fc_layer16only)
+$(addsuffix .o,       $(FC_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER16ONLY_DATA_STAMP)
+$(addsuffix .o.spike, $(FC_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER16ONLY_DATA_STAMP)
+$(addsuffix .o.fpga,  $(FC_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile $(FC_LAYER16ONLY_DATA_STAMP)
 
 # ---------------------------------------------------------------------------
 # fc_layer16_batch12: assembler include root for data.S .incbin paths.
@@ -264,10 +394,10 @@ CONV_LAYER_STATIC_MAX_BATCH ?= $(CONV_LAYER_BATCHSIZE)
 #   python3 conv_layer/scripts/generate_conv_test_vectors.py \
 #       --batch $(CONV_LAYER_BATCHSIZE) --c-in $(CONV_LAYER_C_IN) \
 #       --c-out $(CONV_LAYER_C_OUT) --h $(CONV_LAYER_H) --w $(CONV_LAYER_W)
-CONV_LAYER_C_IN  ?= 1
-CONV_LAYER_C_OUT ?= 1
+CONV_LAYER_C_IN  ?= 64
+CONV_LAYER_C_OUT ?= 32
 CONV_LAYER_H     ?= 1
-CONV_LAYER_W     ?= 16
+CONV_LAYER_W     ?= 128
 
 # im2col scratch for layer 1 (one image): C_IN * 9 * H * W
 CONV_LAYER_XCOL_ELEMS := $(shell expr $(CONV_LAYER_C_IN) \* 9 \* $(CONV_LAYER_H) \* $(CONV_LAYER_W))
@@ -305,8 +435,24 @@ bin/conv_layer.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer
 bin/conv_layer:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer
 bin/conv_layer.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer
 
-# Match fc_layer Spike compile flags for training update objects.
-conv_layer/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+# train.c must be built -O0: its inline asm declares no "memory" / vector-reg
+# clobbers, so at -O3 the compiler reorders around it and the app segfaults.
+# NOTE: this is masking the real bug (missing clobbers), not fixing it.
+#
+# Applied to BOTH conv_layer and conv_layer32, and to all three flavors:
+#   .o        -> plain / Verilator RTL sim
+#   .o.spike  -> Spike
+#   .o.fpga   -> FPGA
+# Previously only conv_layer's .o.spike had it, which (a) left the Verilator and
+# FPGA builds at -O3 (same latent segfault), and (b) meant conv_layer's train.c
+# was -O0 while conv_layer32's was -O3 -- making every train.c-resident stage
+# (prep / loss / zero_d_input / update) incomparable between the two.
+conv_layer/kernel/train.c.o:         RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer/kernel/train.c.o.spike:   RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer/kernel/train.c.o.fpga:    RISCV_CCFLAGS_FPGA  += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer32/kernel/train.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer32/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer32/kernel/train.c.o.fpga:  RISCV_CCFLAGS_FPGA  += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
 
 # conv_layer32: same profile knobs as conv_layer, but must NOT reuse conv_layer's
 # -Wa,-I path. bin/conv_layer% used to match bin/conv_layer32 too, silently
@@ -325,93 +471,348 @@ bin/conv_layer32.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer32
 bin/conv_layer32:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer32
 bin/conv_layer32.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer32
 
-# Ensure conv_layer objects rebuild when Makefile-defined knobs change.
-conv_layer/%.c.o: $(APPS_DIR)/Makefile
-conv_layer/%.S.o: $(APPS_DIR)/Makefile
-conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
-conv_layer/%.S.o.spike: $(APPS_DIR)/Makefile
+# ---------------------------------------------------------------------------
+# conv_layer16only: FP16 sibling of conv_layer32.
+#
+# This app previously had NO block at all. conv_layer's rules are scoped
+# `bin/conv_layer.%` (with a dot) and conv_layer32's `bin/conv_layer32.%`, so
+# bin/conv_layer16only matched NEITHER: it was built with no -DCONV1_* defines
+# (silently falling back to the 43/43/8/8 header defaults, which disagree with
+# the config kernel/weights.c was generated for) and with no -Wa,-I, so data.S
+# could not resolve .incbin "generated_data/..." and the build failed outright.
+#
+# BENCHMARK PARITY: these dims MUST track CONV_LAYER_* above (which conv_layer32
+# is built with). C_OUT was 16 here against conv_layer32's 32, so the FP16 app
+# executed exactly half the FLOPs and half the output-side memory traffic --
+# every cycle comparison between the two was meaningless. Keep them equal.
+#
+# Defaults match the config recorded in kernel/weights.c, regenerate with:
+#   cd conv_layer16only && python3 scripts/generate_conv_test_vectors.py \
+#       --batch 1 --c-in 64 --c-out 32 --h 1 --w 128
+# The generator uses the same seed and the same RNG call order as the FP32 one,
+# so at matching dims the FP16 arrays are the exact fp16 rounding of the FP32
+# arrays -- accuracy deltas are then attributable to precision alone.
+# ---------------------------------------------------------------------------
+CONV_LAYER16ONLY_BATCHSIZE ?= $(CONV_LAYER_BATCHSIZE)
+CONV_LAYER16ONLY_EPOCHS ?= $(CONV_LAYER_EPOCHS)
+CONV_LAYER16ONLY_STATIC_MAX_BATCH ?= $(CONV_LAYER16ONLY_BATCHSIZE)
+CONV_LAYER16ONLY_C_IN  ?= $(CONV_LAYER_C_IN)
+CONV_LAYER16ONLY_C_OUT ?= $(CONV_LAYER_C_OUT)
+CONV_LAYER16ONLY_H     ?= $(CONV_LAYER_H)
+CONV_LAYER16ONLY_W     ?= $(CONV_LAYER_W)
+CONV_LAYER16ONLY_XCOL_ELEMS := $(shell expr $(CONV_LAYER16ONLY_C_IN) \* 9 \* $(CONV_LAYER16ONLY_H) \* $(CONV_LAYER16ONLY_W))
+
+CONV_LAYER16ONLY_DEFINES := \
+    -DALEXNET_MODE_TRAIN \
+    -DALEXNET_BATCHSIZE=$(CONV_LAYER16ONLY_BATCHSIZE) \
+    -DALEXNET_STATIC_MAX_BATCH=$(CONV_LAYER16ONLY_STATIC_MAX_BATCH) \
+    -DALEXNET_EPOCHS=$(CONV_LAYER16ONLY_EPOCHS) \
+    -DCONV1_IN_CHANNELS=$(CONV_LAYER16ONLY_C_IN) \
+    -DCONV1_OUT_CHANNELS=$(CONV_LAYER16ONLY_C_OUT) \
+    -DCONV1_IN_H=$(CONV_LAYER16ONLY_H) -DCONV1_IN_W=$(CONV_LAYER16ONLY_W) \
+    -DCONV1_OUT_H=$(CONV_LAYER16ONLY_H) -DCONV1_OUT_W=$(CONV_LAYER16ONLY_W) \
+    -DCONV1_XCOL_ELEMS=$(CONV_LAYER16ONLY_XCOL_ELEMS)
+
+bin/conv_layer16only:   $(APPS_DIR)/Makefile
+bin/conv_layer16only.%: $(APPS_DIR)/Makefile
+bin/conv_layer16only:   ENV_DEFINES += $(CONV_LAYER16ONLY_DEFINES)
+bin/conv_layer16only.%: ENV_DEFINES += $(CONV_LAYER16ONLY_DEFINES)
+bin/conv_layer16only:   AUTOVECTORIZE = 0
+bin/conv_layer16only.%: AUTOVECTORIZE = 0
+bin/conv_layer16only:   RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer16only
+bin/conv_layer16only.%: RISCV_CCFLAGS += -Wa,-I$(CURDIR)/conv_layer16only
+bin/conv_layer16only:   RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer16only
+bin/conv_layer16only.%: RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/conv_layer16only
+bin/conv_layer16only:   RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer16only
+bin/conv_layer16only.%: RISCV_CCFLAGS_FPGA += -Wa,-I$(CURDIR)/conv_layer16only
+
+conv_layer16only/kernel/train.c.o:       RISCV_CCFLAGS       += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer16only/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+conv_layer16only/kernel/train.c.o.fpga:  RISCV_CCFLAGS_FPGA  += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+CONV_LAYER16ONLY_SRCS := $(call find_app_sources,conv_layer16only)
+$(addsuffix .o,       $(CONV_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile
+$(addsuffix .o.spike, $(CONV_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile
+$(addsuffix .o.fpga,  $(CONV_LAYER16ONLY_SRCS)): $(APPS_DIR)/Makefile
+
+# Ensure conv_layer / conv_layer32 objects rebuild when Makefile-defined knobs
+# change; otherwise a CONV_LAYER_W change silently relinks stale objects built
+# with the old -DCONV1_* dims.
+#
+# These MUST be explicit target lists. The previous form here --
+#     conv_layer/%.c.o.spike: $(APPS_DIR)/Makefile
+# -- was a silent no-op: a recipe-less pattern rule does not add a prerequisite to
+# the pattern rule in common/runtime.mk that actually builds the object; make just
+# ignores it. Same fix as fc_layer16only above.
+CONV_LAYER_SRCS   := $(call find_app_sources,conv_layer)
+CONV_LAYER32_SRCS := $(call find_app_sources,conv_layer32)
+$(addsuffix .o,       $(CONV_LAYER_SRCS)):   $(APPS_DIR)/Makefile
+$(addsuffix .o.spike, $(CONV_LAYER_SRCS)):   $(APPS_DIR)/Makefile
+$(addsuffix .o.fpga,  $(CONV_LAYER_SRCS)):   $(APPS_DIR)/Makefile
+$(addsuffix .o,       $(CONV_LAYER32_SRCS)): $(APPS_DIR)/Makefile
+$(addsuffix .o.spike, $(CONV_LAYER32_SRCS)): $(APPS_DIR)/Makefile
+$(addsuffix .o.fpga,  $(CONV_LAYER32_SRCS)): $(APPS_DIR)/Makefile
+
+# data.S .incbin's generated_data/*.bin, but the %.S.o rules only depend on the
+# .S file -- regenerating the data would NOT rebuild these. Make it explicit.
+conv_layer/data.S.o        conv_layer/data.S.o.spike        conv_layer/data.S.o.fpga:        $(wildcard $(APPS_DIR)/conv_layer/generated_data/*.bin)
+conv_layer32/data.S.o      conv_layer32/data.S.o.spike      conv_layer32/data.S.o.fpga:      $(wildcard $(APPS_DIR)/conv_layer32/generated_data/*.bin)
+conv_layer16only/data.S.o  conv_layer16only/data.S.o.spike  conv_layer16only/data.S.o.fpga:  $(wildcard $(APPS_DIR)/conv_layer16only/generated_data/*.bin)
 
 # ---------------------------------------------------------------------------
-# vggnet: VGGMini fp16 fine-tuning on CIFAR-100-C (gaussian_noise)
+# vggnet: MiniVGGNet fp32 classifier-head fine-tuning / test-time adaptation on
+# CIFAR-100 (and CIFAR-100-C), using the vectorized fc_layer32 + conv_layer32
+# kernels. Built via the generic app template below (same pattern as fc_layer32).
 #
-# Prerequisites (run once, from ~/vggnet):
-#   python3 scripts/prepare_cifar100c.py CIFAR-100-C/ gaussian_noise --severity 3
-#   python3 scripts/fp32_to_fp16_weights.py
+# Prerequisites (run once, from apps/vggnet):
+#   python3 scripts/prepare_cifar100c.py CIFAR-100-C/ --all --severity 2   # adaptation data
+#   # embed the pretrained checkpoint into kernel/weights.c (no filesystem on Spike)
 #
 # Usage:
-#   make spike-run-vggnet                                          # tiny, bs=16, ep=20
-#   make spike-run-vggnet VGGNET_VARIANT=small VGGNET_BATCHSIZE=8
-#   make spike-run-vggnet VGGNET_VARIANT=full  VGGNET_EPOCHS=5
+#   make spike-run-vggnet                                    # alpha, bs=32, 2 steps
+#   make bin/vggnet.spike VGGNET_VARIANT=full VGGNET_MAX_STEPS=1
 #
-# NOTE: vggnet uses a fully custom build rule (not the auto-template) because:
-#   - The auto-APPS find does not follow symlinks
-#   - scripts/im2col_test.c has its own main() that must be excluded
-#   - data_cifar100.S must be linked instead of data.S
+# NOTES:
+#   - The cifar10 data.S is renamed out of the *.S glob (both data.S files export
+#     the same symbols); data_cifar100.S carries the embedded dataset.
+#   - The stray scripts/im2col_test.c (a second main) is renamed out of the glob.
+#   - FINETUNE_MODE + SPIKE (see main.c) skips file I/O and adapts the embedded
+#     weights.c in place, training only fc1/bn5/fc2 with the conv stack frozen.
 # ---------------------------------------------------------------------------
 VGGNET_BATCHSIZE        ?= 32
-VGGNET_EPOCHS           ?= 10
+VGGNET_EPOCHS           ?= 1
 VGGNET_STATIC_MAX_BATCH ?= $(VGGNET_BATCHSIZE)
-# tiny: C1=8 C2=16 C3=32 C4=64 C5=128 FC=128  (default for Spike)
-# small: C1=16 C2=32 C3=64 C4=128 C5=256 FC=256
-# full:  C1=32 C2=64 C3=128 C4=256 C5=512 FC=512
-VGGNET_VARIANT          ?= tiny
+# Cap steps/epoch so a Spike run finishes in reasonable time; 0 = full epoch.
+VGGNET_MAX_STEPS        ?= 2
+# variant: alpha (~324K params, C1=12 C2=24 FC1=192, default) | full (32/64/512)
+VGGNET_VARIANT          ?= alpha
+# Regularisation knobs (override to match a scalar reference run, e.g. all 0 for
+# a deterministic scalar-vs-vector loss comparison).
+VGGNET_DROP1            ?= 0.25
+VGGNET_DROP2            ?= 0.25
+VGGNET_DROPFC          ?= 0.5
+VGGNET_AUGMENT         ?= 1
+# 1 (default) = freeze the conv stack and adapt only fc1/bn5/fc2 from the
+# embedded weights.c. 0 = ALEXNET_MODE_TRAIN proper: random init, every layer
+# trainable, so conv backward and the bn1-bn4 backward (spatial 1024/256)
+# actually run -- matches `make FINETUNE=0` on the native scalar reference.
+VGGNET_FINETUNE        ?= 1
 
-ifeq ($(VGGNET_VARIANT),tiny)
-VGGNET_VARIANT_DEFINES := \
-    -DC1_CHANNELS=8   -DC2_CHANNELS=16  -DC3_CHANNELS=32 \
-    -DC4_CHANNELS=64  -DC5_CHANNELS=128 \
-    -DFC6_LAYER=128   -DFC7_LAYER=128
-else ifeq ($(VGGNET_VARIANT),small)
-VGGNET_VARIANT_DEFINES := \
-    -DC1_CHANNELS=16  -DC2_CHANNELS=32  -DC3_CHANNELS=64 \
-    -DC4_CHANNELS=128 -DC5_CHANNELS=256 \
-    -DFC6_LAYER=256   -DFC7_LAYER=256
+ifeq ($(VGGNET_VARIANT),full)
+VGGNET_VARIANT_DEFINES := -DC1_CHANNELS=32 -DC2_CHANNELS=64 -DFC1_LAYER=512
 else
-VGGNET_VARIANT_DEFINES :=
+VGGNET_VARIANT_DEFINES := -DC1_CHANNELS=12 -DC2_CHANNELS=24 -DFC1_LAYER=192
 endif
 
+# -DFINETUNE_MODE is no longer hardcoded here; it is appended below when
+# VGGNET_FINETUNE=1 (the default), so VGGNET_FINETUNE=0 gives a full training run.
 VGGNET_DEFINES := \
-    -DFINETUNE_16_MODE \
     -DALEXNET_MODE_TRAIN \
     -DALEXNET_BATCHSIZE=$(VGGNET_BATCHSIZE) \
     -DALEXNET_STATIC_MAX_BATCH=$(VGGNET_STATIC_MAX_BATCH) \
     -DALEXNET_EPOCHS=$(VGGNET_EPOCHS) \
-    -DALEXNET_MAX_STEPS=$(ALEXNET_MAX_STEPS) \
-    $(ALEXNET_TIMING_DEFINE) \
-    -DDATASET_CIFAR100 \
+    -DALEXNET_MAX_STEPS=$(VGGNET_MAX_STEPS) \
     -DOUT_LAYER=100 \
-    -DSET_CEL \
+    -DDROPOUT1=$(VGGNET_DROP1)f -DDROPOUT2=$(VGGNET_DROP2)f -DDROPOUT_FC=$(VGGNET_DROPFC)f \
+    -DAUGMENT=$(VGGNET_AUGMENT) \
     $(VGGNET_VARIANT_DEFINES)
 
-# Explicit source list: main.c + kernel/*.c + data_cifar100.S
-# Excludes: scripts/ (has its own main), data.S (cifar10 — not needed here)
-VGGNET_KERNEL_SRCS := $(patsubst $(APPS_DIR)/%,%,\
-    $(shell find -L $(APPS_DIR)/vggnet/kernel -name "*.c" 2>/dev/null))
-VGGNET_SRCS_SPIKE  := vggnet/main.c $(VGGNET_KERNEL_SRCS) vggnet/data_cifar100.S
-VGGNET_OBJS_SPIKE  := $(addsuffix .o.spike,$(VGGNET_SRCS_SPIKE))
+ifeq ($(VGGNET_FINETUNE),1)
+VGGNET_DEFINES += -DFINETUNE_MODE
+endif
+ifneq ($(VGGNET_INIT_GAIN),)
+VGGNET_DEFINES += -DWEIGHT_INIT_GAIN=$(VGGNET_INIT_GAIN)f
+endif
 
-# Per-object compile flags
-$(VGGNET_OBJS_SPIKE): ENV_DEFINES         += $(VGGNET_DEFINES)
-$(VGGNET_OBJS_SPIKE): RISCV_CCFLAGS_SPIKE += -Wa,-I$(APPS_DIR)/vggnet
-$(VGGNET_OBJS_SPIKE): $(APPS_DIR)/Makefile
+# Bisection knobs: route conv/fc forward through the scalar reference paths to
+# isolate whether the vector conv (fconv3d) or vector fc (fmatmul) diverges.
+ifeq ($(VGGNET_SCALAR_CONV),1)
+VGGNET_DEFINES += -DUSE_IM2COL_CONV
+endif
+ifeq ($(VGGNET_SCALAR_FC),1)
+VGGNET_DEFINES += -DUSE_SCALAR_FC
+endif
+# VGGNET_DUMP_CONV1=1 -> one-shot conv1 output dump for image 0 (diagnostic).
+ifeq ($(VGGNET_DUMP_CONV1),1)
+VGGNET_DEFINES += -DDUMP_CONV1
+endif
+# VGGNET_DUMP_TRACE=1 -> one-shot per-layer checksum of the first training
+# forward pass, for locating the first layer that diverges from the native
+# scalar reference (build that side with `make TRACE=1`).
+ifeq ($(VGGNET_DUMP_TRACE),1)
+VGGNET_DEFINES += -DDUMP_TRACE
+endif
 
-# train.c: disable auto-vectorizer (fp16 confuses Spike)
-vggnet/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += \
-    -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+# VGGNET_SGD_SCALAR=1 selects the scalar reference sgd_step instead of the
+# vectorized one -- used to A/B the two against each other.
+VGGNET_SGD_SCALAR ?= 0
+ifeq ($(VGGNET_SGD_SCALAR),1)
+VGGNET_DEFINES += -DSGD_SCALAR
+endif
 
-bin/vggnet.spike: $(VGGNET_OBJS_SPIKE) $(RUNTIME_SPIKE) $(COMMON_SPIKE) patch-spike-crt0
-	mkdir -p bin/
-	$(RISCV_CC) -Iinclude $(RISCV_CCFLAGS_SPIKE) $(VGGNET_DEFINES) -o $@ \
-	    $(VGGNET_OBJS_SPIKE) $(RUNTIME_SPIKE) $(RISCV_LDFLAGS_SPIKE)
-	$(RISCV_OBJDUMP) $(RISCV_OBJDUMP_FLAGS) -D $@ > $@.dump
+bin/vggnet:    $(APPS_DIR)/Makefile
+bin/vggnet.%:  $(APPS_DIR)/Makefile
+bin/vggnet:    ENV_DEFINES += $(VGGNET_DEFINES)
+bin/vggnet.%:  ENV_DEFINES += $(VGGNET_DEFINES)
+bin/vggnet:    AUTOVECTORIZE = 0
+bin/vggnet.%:  AUTOVECTORIZE = 0
+bin/vggnet:    RISCV_CCFLAGS       += -Wa,-I$(CURDIR)/vggnet
+bin/vggnet.%:  RISCV_CCFLAGS       += -Wa,-I$(CURDIR)/vggnet
+bin/vggnet:    RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/vggnet
+bin/vggnet.%:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/vggnet
+# kernel/activation_layer.c pulls __exp_2xf32 from vggnet/lib/exp.h
+# (a symlink to apps/exp/kernel/exp.h, so vggnet stays self-contained).
+bin/vggnet:    RISCV_CCFLAGS       += -I$(CURDIR)/vggnet/lib
+bin/vggnet.%:  RISCV_CCFLAGS       += -I$(CURDIR)/vggnet/lib
+bin/vggnet:    RISCV_CCFLAGS_SPIKE += -I$(CURDIR)/vggnet/lib
+bin/vggnet.%:  RISCV_CCFLAGS_SPIKE += -I$(CURDIR)/vggnet/lib
+bin/vggnet:    RISCV_CCFLAGS_FPGA  += -I$(CURDIR)/vggnet/lib
+bin/vggnet.%:  RISCV_CCFLAGS_FPGA  += -I$(CURDIR)/vggnet/lib
+bin/vggnet:    RISCV_CCFLAGS_FPGA  += -Wa,-I$(CURDIR)/vggnet
+bin/vggnet.%:  RISCV_CCFLAGS_FPGA  += -Wa,-I$(CURDIR)/vggnet
 
-.PHONY: spike-run-vggnet
-spike-run-vggnet: bin/vggnet.spike
-	mkdir -p spike_runs
-	@echo
-	@echo "Simulating vggnet with SPIKE:"
-	@echo
-	$(RISCV_SIM) $(RISCV_SIM_OPT) $< | tee spike_runs/spike-run-vggnet
+# train.c holds the scalar SGD update; main.c is scalar forward orchestration.
+# Build both at -O0 without the LLVM autovectorizer so it never emits scalable
+# vector ops that clash with the hand-written fixed-vl kernels.
+vggnet/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+vggnet/main.c.o.spike:         RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+# Every VGGNET_* knob lands in ENV_DEFINES, which only affects the *compile*
+# line. Declaring the dependency on the link target alone (`bin/vggnet%:
+# Makefile`) relinks stale objects instead of rebuilding them, so a changed
+# knob silently has no effect -- e.g. main.c kept a -DFINETUNE_MODE object
+# across runs that passed VGGNET_FINETUNE=0, which cost three debugging
+# detours. List the objects explicitly, as fc_layer32 already does.
+# Depending on the Makefile alone is NOT enough: make cannot see a change to a
+# command-line variable, because the Makefile's own mtime is unchanged. So
+# record the resolved define set in a stamp and rewrite it only when it
+# differs -- the objects then rebuild exactly when a knob actually changes.
+# GUARD: vggnet/ is not always present -- a partial checkout, or an scp of just
+# the layer benchmarks, leaves it missing. Everything below runs at PARSE time
+# ($(shell ...) and $(call find_app_sources,...)), so without this guard EVERY
+# make invocation -- including `make clean` -- errors with
+#   bash: .../vggnet/.build_flags.tmp: No such file or directory
+#   find: 'vggnet': No such file or directory
+ifneq ($(wildcard $(APPS_DIR)/vggnet),)
+
+VGGNET_FLAGS_STAMP := $(APPS_DIR)/vggnet/.build_flags
+$(shell printf '%s\n' '$(VGGNET_DEFINES)' > $(VGGNET_FLAGS_STAMP).tmp; \
+        cmp -s $(VGGNET_FLAGS_STAMP).tmp $(VGGNET_FLAGS_STAMP) \
+          || mv $(VGGNET_FLAGS_STAMP).tmp $(VGGNET_FLAGS_STAMP); \
+        rm -f $(VGGNET_FLAGS_STAMP).tmp)
+
+VGGNET_SRCS := $(call find_app_sources,vggnet)
+$(addsuffix .o,       $(VGGNET_SRCS)): $(APPS_DIR)/Makefile $(VGGNET_FLAGS_STAMP)
+$(addsuffix .o.spike, $(VGGNET_SRCS)): $(APPS_DIR)/Makefile $(VGGNET_FLAGS_STAMP)
+$(addsuffix .o.fpga,  $(VGGNET_SRCS)): $(APPS_DIR)/Makefile $(VGGNET_FLAGS_STAMP)
+
+# data_cifar100.S .incbin's kernel/cifar100_*.bin; rebuild the object when the
+# embedded dataset changes.
+vggnet/data_cifar100.S.o vggnet/data_cifar100.S.o.spike vggnet/data_cifar100.S.o.fpga: $(wildcard $(APPS_DIR)/vggnet/kernel/cifar100_*.bin)
+
+endif # vggnet present
+
+# NOTE: `spike-run-vggnet` is auto-generated by the generic run_benchmark_spike
+# template below (like every other app), so no explicit rule is needed here.
+
+# ---------------------------------------------------------------------------
+# vggnet16: FP16 twin of vggnet. Same MiniVGGNet architecture, but every layer
+# runs in _Float16 (see vggnet16/kernel/*). Training uses the FP16 techniques
+# from fc_layer16only / conv_layer16only -- dynamic loss scaling, fflags-based
+# overflow/underflow detection, skip-step on overflow, momentum as the sole
+# accumulator (NO fp32 master weights), RNE rounding, fp32 islands for the
+# softmax transcendentals. Built via the generic app template, like vggnet.
+#
+# weights.c is FP16, generated by scripts/binary2text_weights_fp16.py.
+#
+# Usage:
+#   make spike-run-vggnet16 VGGNET16_FINETUNE=0 VGGNET16_BATCHSIZE=4 VGGNET16_EPOCHS=4
+# ---------------------------------------------------------------------------
+VGGNET16_BATCHSIZE        ?= 32
+VGGNET16_EPOCHS           ?= 1
+VGGNET16_STATIC_MAX_BATCH ?= $(VGGNET16_BATCHSIZE)
+VGGNET16_MAX_STEPS        ?= 2
+VGGNET16_VARIANT          ?= alpha
+VGGNET16_DROP1            ?= 0.25
+VGGNET16_DROP2            ?= 0.25
+VGGNET16_DROPFC          ?= 0.5
+VGGNET16_AUGMENT         ?= 1
+VGGNET16_FINETUNE        ?= 1
+
+ifeq ($(VGGNET16_VARIANT),full)
+VGGNET16_VARIANT_DEFINES := -DC1_CHANNELS=32 -DC2_CHANNELS=64 -DFC1_LAYER=512
+else
+VGGNET16_VARIANT_DEFINES := -DC1_CHANNELS=12 -DC2_CHANNELS=24 -DFC1_LAYER=192
+endif
+
+VGGNET16_DEFINES := \
+    -DALEXNET_MODE_TRAIN \
+    -DALEXNET_BATCHSIZE=$(VGGNET16_BATCHSIZE) \
+    -DALEXNET_STATIC_MAX_BATCH=$(VGGNET16_STATIC_MAX_BATCH) \
+    -DALEXNET_EPOCHS=$(VGGNET16_EPOCHS) \
+    -DALEXNET_MAX_STEPS=$(VGGNET16_MAX_STEPS) \
+    -DOUT_LAYER=100 \
+    -DDROPOUT1=$(VGGNET16_DROP1)f -DDROPOUT2=$(VGGNET16_DROP2)f -DDROPOUT_FC=$(VGGNET16_DROPFC)f \
+    -DAUGMENT=$(VGGNET16_AUGMENT) \
+    $(VGGNET16_VARIANT_DEFINES)
+
+ifeq ($(VGGNET16_FINETUNE),1)
+VGGNET16_DEFINES += -DFINETUNE_MODE
+endif
+ifeq ($(VGGNET16_SELFTEST),1)
+VGGNET16_DEFINES += -DCONV_SELFTEST
+endif
+ifneq ($(VGGNET16_INIT_GAIN),)
+VGGNET16_DEFINES += -DWEIGHT_INIT_GAIN=$(VGGNET16_INIT_GAIN)f
+endif
+ifneq ($(VGGNET16_INPUT_SCALE),)
+VGGNET16_DEFINES += -DINPUT_SCALE=$(VGGNET16_INPUT_SCALE)f
+endif
+ifeq ($(VGGNET16_DUMP_TRACE),1)
+VGGNET16_DEFINES += -DDUMP_TRACE
+endif
+VGGNET16_SGD_SCALAR ?= 0
+ifeq ($(VGGNET16_SGD_SCALAR),1)
+VGGNET16_DEFINES += -DSGD_SCALAR
+endif
+
+bin/vggnet16:    $(APPS_DIR)/Makefile
+bin/vggnet16.%:  $(APPS_DIR)/Makefile
+bin/vggnet16:    ENV_DEFINES += $(VGGNET16_DEFINES)
+bin/vggnet16.%:  ENV_DEFINES += $(VGGNET16_DEFINES)
+bin/vggnet16:    AUTOVECTORIZE = 0
+bin/vggnet16.%:  AUTOVECTORIZE = 0
+bin/vggnet16:    RISCV_CCFLAGS       += -Wa,-I$(CURDIR)/vggnet16
+bin/vggnet16.%:  RISCV_CCFLAGS       += -Wa,-I$(CURDIR)/vggnet16
+bin/vggnet16:    RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/vggnet16
+bin/vggnet16.%:  RISCV_CCFLAGS_SPIKE += -Wa,-I$(CURDIR)/vggnet16
+# kernel/activation_layer.c pulls __exp_2xf32 from vggnet16/lib/exp.h
+bin/vggnet16:    RISCV_CCFLAGS       += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16.%:  RISCV_CCFLAGS       += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16:    RISCV_CCFLAGS_SPIKE += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16.%:  RISCV_CCFLAGS_SPIKE += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16:    RISCV_CCFLAGS_FPGA  += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16.%:  RISCV_CCFLAGS_FPGA  += -I$(CURDIR)/vggnet16/lib
+bin/vggnet16:    RISCV_CCFLAGS_FPGA  += -Wa,-I$(CURDIR)/vggnet16
+bin/vggnet16.%:  RISCV_CCFLAGS_FPGA  += -Wa,-I$(CURDIR)/vggnet16
+
+vggnet16/kernel/train.c.o.spike: RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+vggnet16/main.c.o.spike:         RISCV_CCFLAGS_SPIKE += -O0 -fno-vectorize -mllvm -scalable-vectorization=off
+
+ifneq ($(wildcard $(APPS_DIR)/vggnet16),)
+VGGNET16_FLAGS_STAMP := $(APPS_DIR)/vggnet16/.build_flags
+$(shell printf '%s\n' '$(VGGNET16_DEFINES)' > $(VGGNET16_FLAGS_STAMP).tmp; \
+        cmp -s $(VGGNET16_FLAGS_STAMP).tmp $(VGGNET16_FLAGS_STAMP) \
+          || mv $(VGGNET16_FLAGS_STAMP).tmp $(VGGNET16_FLAGS_STAMP); \
+        rm -f $(VGGNET16_FLAGS_STAMP).tmp)
+
+VGGNET16_SRCS := $(call find_app_sources,vggnet16)
+$(addsuffix .o,       $(VGGNET16_SRCS)): $(APPS_DIR)/Makefile $(VGGNET16_FLAGS_STAMP)
+$(addsuffix .o.spike, $(VGGNET16_SRCS)): $(APPS_DIR)/Makefile $(VGGNET16_FLAGS_STAMP)
+$(addsuffix .o.fpga,  $(VGGNET16_SRCS)): $(APPS_DIR)/Makefile $(VGGNET16_FLAGS_STAMP)
+
+vggnet16/data_cifar100.S.o vggnet16/data_cifar100.S.o.spike vggnet16/data_cifar100.S.o.fpga: $(wildcard $(APPS_DIR)/vggnet16/kernel/cifar100_*.bin)
+endif # vggnet16 present
 
 all: $(BINARIES)
 

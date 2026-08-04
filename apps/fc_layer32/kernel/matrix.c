@@ -69,13 +69,21 @@ static inline unsigned long int fmatmul_row_block(unsigned long int m)
 void matrix_multiply_32(const float *a, const float *b, float *c, const int M, const int N, const int K)
 {
     /**
-     * matrix multiply, c = a * b
-     * 
+     * matrix multiply, c = a * b   (c is OVERWRITTEN, not accumulated)
+     *
      * Input:
      * a    [M,N]
      * b    [N,K]
      * Output:
      * c    [M,K]
+     *
+     * All three exit paths below must honour that contract. They previously did
+     * not: fmatmul_32() overwrites, but the scalar fallback and the M-padding
+     * copy-back both ACCUMULATED into c. Which one you got depended on the
+     * matrix shape (via fmatmul_row_block() and the FMATMUL_MAX_* limits), so
+     * the same call could overwrite or accumulate depending on M/N/K -- and a
+     * caller that did not pre-zero c silently summed every invocation on top of
+     * the previous one.
      * */
     if (M <= 0 || N <= 0 || K <= 0)
         return;
@@ -88,6 +96,9 @@ void matrix_multiply_32(const float *a, const float *b, float *c, const int M, c
         padded_m > FMATMUL_MAX_M)
     {
         printf_("[SCALAR] matrix_multiply_32: M=%d N=%d K=%d padded_m=%lu MAX_M=%d\n", M, N, K, padded_m, FMATMUL_MAX_M);
+        // matrix_multiply_scalar() accumulates (`*c_ptr += ...`), so zero c
+        // first to keep this path's contract identical to the vector paths.
+        memset(c, 0, (size_t)M * (size_t)K * sizeof(float));
         matrix_multiply_scalar(a, b, c, M, N, K);
         return;
     }
@@ -137,11 +148,11 @@ void matrix_multiply_32(const float *a, const float *b, float *c, const int M, c
     while (remaining_mk > 0)
     {
         size_t vl = 0;
+        // Plain copy-back: the M-padded result in fmatmul_c_scratch_32 IS the
+        // answer. This used to vle32 the old c and vfadd into it, accumulating.
         asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
         asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;
@@ -235,7 +246,7 @@ void matrix_multiply_nt_32(const float *a, const float *b, float *c,
                         const int M, const int N, const int K)
 {
     /**
-     * matrix multiply, c += a * b^T
+     * matrix multiply, c = a * b^T
      *
      * Input:
      * a    [M,N]
@@ -258,44 +269,49 @@ void matrix_multiply_nt_32(const float *a, const float *b, float *c,
     //     return;
     // }
 
+    if (padded_m == (unsigned long int)M) {
+        // No row padding: write straight into c.
+        fmatmul_nt_32(c, a, b,
+                   (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
+        return;
+    }
+
     const size_t mn = (size_t)M * (size_t)N;
     const size_t pnk = (size_t)padded_m * (size_t)N;
     const size_t mk = (size_t)M * (size_t)K;
 
-    if (padded_m == (unsigned long int)M) {
-        fmatmul_nt_32(fmatmul_c_scratch_32, a, b,
-                   (unsigned long int)M, (unsigned long int)N, (unsigned long int)K);
-    } else {
-        size_t remaining_mn = mn;
-        const float *src_mn = a;
-        float *dst_mn = fmatmul_a_scratch;
-        while (remaining_mn > 0)
-        {
-            size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
-            asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
-            src_mn += vl;
-            dst_mn += vl;
-            remaining_mn -= vl;
-        }
-
-        size_t remaining = pnk - mn;
-        float *dst = fmatmul_a_scratch + mn;
-        while (remaining > 0)
-        {
-            size_t vl = 0;
-            asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
-            asm volatile("vmv.v.x v0, zero");
-            asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
-            dst += vl;
-            remaining -= vl;
-        }
-
-        fmatmul_nt_32(fmatmul_c_scratch_32, fmatmul_a_scratch, b,
-                   padded_m, (unsigned long int)N, (unsigned long int)K);
+    // Pack a into the padded scratch (rows [M, padded_m) zero-filled).
+    size_t remaining_mn = mn;
+    const float *src_mn = a;
+    float *dst_mn = fmatmul_a_scratch;
+    while (remaining_mn > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mn));
+        asm volatile("vle32.v v0, (%0);" : : "r"(src_mn) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mn) : "memory");
+        src_mn += vl;
+        dst_mn += vl;
+        remaining_mn -= vl;
     }
 
+    size_t remaining = pnk - mn;
+    float *dst = fmatmul_a_scratch + mn;
+    while (remaining > 0)
+    {
+        size_t vl = 0;
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining));
+        asm volatile("vmv.v.x v0, zero");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst) : "memory");
+        dst += vl;
+        remaining -= vl;
+    }
+
+    // fmatmul writes padded_m rows, so it cannot target c directly here.
+    fmatmul_nt_32(fmatmul_c_scratch_32, fmatmul_a_scratch, b,
+               padded_m, (unsigned long int)N, (unsigned long int)K);
+
+    // Copy the valid M*K rows into c.
     size_t remaining_mk = mk;
     const float *src_mk = fmatmul_c_scratch_32;
     float *dst_mk = c;
@@ -304,9 +320,7 @@ void matrix_multiply_nt_32(const float *a, const float *b, float *c,
         size_t vl = 0;
         asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(remaining_mk));
         asm volatile("vle32.v v0, (%0);" : : "r"(src_mk) : "memory");
-        asm volatile("vle32.v v8, (%0);" : : "r"(dst_mk) : "memory");
-        asm volatile("vfadd.vv v8, v8, v0");
-        asm volatile("vse32.v v8, (%0);" : : "r"(dst_mk) : "memory");
+        asm volatile("vse32.v v0, (%0);" : : "r"(dst_mk) : "memory");
         src_mk += vl;
         dst_mk += vl;
         remaining_mk -= vl;

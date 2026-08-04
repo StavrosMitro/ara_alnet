@@ -346,7 +346,7 @@ void setup_alexnet(alexnet *net, short batchsize)
     printf_("batchsize in setup\n");
     net->fc1.batchsize   = batchsize;
 
-    net->fc1.in_units = 2048;
+    net->fc1.in_units = 128;
     net->fc1.out_units = FC6_LAYER;
     net->fc1.layer_id = 1;
     // fc1 is the terminal (logits) layer in this harness: FP32 output + FP32 loss.
