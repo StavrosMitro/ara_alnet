@@ -186,35 +186,6 @@ trap_vector:
     jr t5
 1:
 #endif
-#ifdef FPGA
-    // K5-VGG: generically resume from an unserviced ecall (newlib syscall
-    // stub, mcause=11) instead of treating it as fatal. newlib has ~50
-    // possible syscall stubs (_open, _kill, _times, _link, ...) and there is
-    // no way to enumerate up front which ones a future library addition
-    // might pull in -- found by hand-fixing _fstat then _sbrk one at a time
-    // (see util.c's block comment) before switching to this generic
-    // approach. a0=-1 matches the negative-errno convention every one of
-    // these reentrant wrapper stubs already checks for (confirmed in
-    // _fstat_r's disassembly: `bgez a0` skips the errno-set path only on a
-    // non-negative return -- -1 takes the same path a real kernel-rejected
-    // syscall would). mepc+4 skips the ecall itself (always 4 bytes, no
-    // compressed form) so execution resumes at the instruction right after
-    // it, in the caller, as if the syscall had returned -1.
-    //
-    // Only mcause==11 (ECALL from M-mode) is intercepted here; every other
-    // exception (illegal instruction, misaligned/access fault, page fault)
-    // falls through to the diagnostic block and _fail exactly as before --
-    // this does not make real hardware faults any less fatal.
-    csrr t5, mcause
-    li   t6, 11
-    bne  t5, t6, .Lnot_ecall
-    li   a0, -1
-    csrr t5, mepc
-    addi t5, t5, 4
-    csrw mepc, t5
-    mret
-.Lnot_ecall:
-#endif
     // ---- TRAP DIAGNOSTIC BLOCK ----------------------------------------
     // Record the trap unambiguously, FIRST, before anything else can go wrong.
     // Why the old handler was not enough: it only captured mcause and wrote it

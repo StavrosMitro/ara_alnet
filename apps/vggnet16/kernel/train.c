@@ -258,6 +258,18 @@ static void narrow_f32_to_f16_vec(_Float16 *dst, const float *src, int n)
     }
 }
 
+// Scalar narrow fp32 -> fp16, for the fp16_only branch: Ara has no FP32
+// vector datapath there (FPUSupportHalf), so narrow_f32_to_f16_vec's
+// vfncvt.f.f.w (reads its source at EW32) can't be used -- it would trap.
+// Plain scalar narrowing instead (soft-float on the fp32 side, hardware Zfh
+// for the _Float16 result). Not vectorized, but neither call site is hot:
+// the image narrowing runs once per batch fetch and the gradient narrowing
+// is BATCH_SIZE*OUT_LAYER (small, OUT_LAYER=100 classes).
+static void narrow_f32_to_f16_scalar(_Float16 *dst, const float *src, int n)
+{
+    for (int i = 0; i < n; i++) dst[i] = (_Float16)src[i];
+}
+
 // Read fflags after the backward pass, decide whether the optimizer may run,
 // and adjust the loss scale for the next step. Returns 1 = apply, 0 = skip.
 static int fp16_grads_ok_and_adjust(void)
@@ -332,7 +344,7 @@ static float cross_entropy_loss(_Float16 *delta_preds, const _Float16 *preds,
         }
     }
 
-    narrow_f32_to_f16_vec(delta_preds, ce_grad_f32, BATCH_SIZE * units);
+    narrow_f32_to_f16_scalar(delta_preds, ce_grad_f32, BATCH_SIZE * units);
     return total_loss / BATCH_SIZE;
 }
 
@@ -856,7 +868,7 @@ void alexnet_train(alexnet *net, int epochs)
         for (int b = 0; b < steps_per_epoch; b++) {
             get_train_batch(net->batchsize, train_input_buf, batch_Y,
                             net->conv1.in_w, net->conv1.in_h, net->conv1.in_channels);
-            narrow_f32_to_f16_vec(net->input, train_input_buf,
+            narrow_f32_to_f16_scalar(net->input, train_input_buf,
                                   net->batchsize * IMAGE_UNITS);
 #ifdef INPUT_SCALE
             // Optional FP16 input scaling. NOTE: bn1 normalises conv1's output,
@@ -947,7 +959,7 @@ void alexnet_test(alexnet *net)
                                    net->conv1.in_w, net->conv1.in_h,
                                    net->conv1.in_channels);
         if (valid <= 0) break;
-        narrow_f32_to_f16_vec(net->input, test_input_buf,
+        narrow_f32_to_f16_scalar(net->input, test_input_buf,
                               net->batchsize * IMAGE_UNITS);
 
         forward_alexnet(net);

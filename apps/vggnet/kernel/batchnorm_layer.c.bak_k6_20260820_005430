@@ -335,26 +335,8 @@ void batch_norm_op_backward_full(batch_norm_op *op)
             float dg_sum = 0.0f;
             float db_sum = 0.0f;
 
-            // K6: v25 -> v16. Ara's OPFVV reduction decode (ara_dispatcher.sv)
-            // checks vs1 against the ACTIVE lmul (m8 here) via lmul_vs1, which
-            // defaults to csr_vtype_q.vlmul and is never reset for VFREDUSUM --
-            // unlike vd (protected by a global emul=LMUL_1 default) and unlike
-            // the integer reduction path (OPMVV), which doesn't check vs1
-            // alignment at all. Per RVV 1.0 a reduction's vs1 is EMUL=1 with no
-            // alignment requirement, so this is a genuine Ara bug, not a
-            // real constraint -- v25 & 0b111 = 1 != 0 trapped as illegal
-            // (confirmed via mepc/mtval read from the trap registers while
-            // halted, not guessed). v16 is 8-aligned and free in this loop's
-            // scope (confirmed: grepped 313-365 for v16, zero hits before this
-            // change) -- the ONLY other user of v16 in this function is the
-            // second loop below (line ~395), which loads it fresh via vle32.v
-            // strictly after this loop's own v16 has already been read back
-            // (below), so there is no overlap. Renamed consistently at every
-            // reference (init here, the vfredusum.vs use, and the vfmv.f.s
-            // readback) -- renaming only the crashing line would leave the
-            // init/readback on the old register and silently corrupt d_beta.
             asm volatile("vfmv.s.f v24, %0" : : "f"(dg_sum)); // Accumulator  d_gamma
-            asm volatile("vfmv.s.f v16, %0" : : "f"(db_sum)); // Accumulator  d_beta
+            asm volatile("vfmv.s.f v25, %0" : : "f"(db_sum)); // Accumulator  d_beta
 
             while (s > 0) {
                 unsigned long int vl;
@@ -363,19 +345,19 @@ void batch_norm_op_backward_full(batch_norm_op *op)
                 asm volatile("vle32.v v0, (%0)" : : "r"(xnorm_ptr));
                 asm volatile("vle32.v v8, (%0)" : : "r"(dout_ptr));
                 
-                asm volatile("vfredusum.vs v16, v8, v16");
-
+                asm volatile("vfredusum.vs v25, v8, v25");
+                
                 asm volatile("vfmul.vv v0, v0, v8");
-
+                
                 asm volatile("vfredusum.vs v24, v0, v24");
-
+                
                 xnorm_ptr += vl;
                 dout_ptr += vl;
                 s -= vl;
             }
-
+            
             asm volatile("vfmv.f.s %0, v24" : "=f"(dg_sum));
-            asm volatile("vfmv.f.s %0, v16" : "=f"(db_sum));
+            asm volatile("vfmv.f.s %0, v25" : "=f"(db_sum));
             
             op->d_gamma[c] += dg_sum;
             op->d_beta[c] += db_sum;
@@ -450,13 +432,8 @@ void batch_norm_op_backward_input_only(batch_norm_op *op)
             float sum_dy = 0.0f;
             float sum_dy_xn = 0.0f;
 
-            // K6: v25 -> v16, same reasoning and same safety check as the
-            // identical pattern in batch_norm_op_backward_full above (grepped
-            // this function's 415-462 scope for v16: zero hits before this
-            // change; the only other v16 user is the second loop below,
-            // sequentially after this one's own readback).
-            asm volatile("vfmv.s.f v24, %0" : : "f"(sum_dy_xn));
-            asm volatile("vfmv.s.f v16, %0" : : "f"(sum_dy));
+            asm volatile("vfmv.s.f v24, %0" : : "f"(sum_dy_xn)); 
+            asm volatile("vfmv.s.f v25, %0" : : "f"(sum_dy)); 
 
             while (s > 0) {
                 unsigned long int vl;
@@ -465,19 +442,19 @@ void batch_norm_op_backward_input_only(batch_norm_op *op)
                 asm volatile("vle32.v v0, (%0)" : : "r"(xnorm_ptr));
                 asm volatile("vle32.v v8, (%0)" : : "r"(dout_ptr));
                 
-                asm volatile("vfredusum.vs v16, v8, v16");
-
+                asm volatile("vfredusum.vs v25, v8, v25");
+                
                 asm volatile("vfmul.vv v0, v0, v8");
-
+                
                 asm volatile("vfredusum.vs v24, v0, v24");
-
+                
                 xnorm_ptr += vl;
                 dout_ptr += vl;
                 s -= vl;
             }
-
+            
             asm volatile("vfmv.f.s %0, v24" : "=f"(sum_dy_xn));
-            asm volatile("vfmv.f.s %0, v16" : "=f"(sum_dy));
+            asm volatile("vfmv.f.s %0, v25" : "=f"(sum_dy));
             
             S1[c] += sum_dy;
             S2[c] += sum_dy_xn;

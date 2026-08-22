@@ -1,1 +1,1 @@
-samples=4 in=256 out=256 seed=42
+samples=4 in=1536 out=192 seed=42
